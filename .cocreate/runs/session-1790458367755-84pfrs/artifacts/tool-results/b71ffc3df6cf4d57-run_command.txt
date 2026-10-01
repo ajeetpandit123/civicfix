@@ -1,0 +1,113 @@
+ameter 'b' implicitly has an 'any' type.
+
+299     .sort((a, b) => b.score - a.score)
+                  ~
+
+src/services/complaintService.ts:304:27 - error TS7006: Parameter 'c' implicitly has an 'any' type.
+
+304     data: candidates.map((c) => ({
+                              ~
+
+src/services/complaintService.ts:311:26 - error TS7006: Parameter 'c' implicitly has an 'any' type.
+
+311   return candidates.map((c) => ({
+                             ~
+
+src/services/complaintService.ts:343:23 - error TS2694: Namespace '"C:/civicfix/node_modules/.prisma/client/default".Prisma' has no exported member 'ComplaintWh
+ereInput'.
+
+343   const where: Prisma.ComplaintWhereInput = { deletedAt: null };
+                          ~~~~~~~~~~~~~~~~~~~
+
+src/services/complaintService.ts:405:22 - error TS2694: Namespace '"C:/civicfix/node_modules/.prisma/client/default".Prisma' has no exported member 'ComplaintUp
+dateInput'.
+
+405   const data: Prisma.ComplaintUpdateInput = { status: to };
+                         ~~~~~~~~~~~~~~~~~~~~
+
+src/services/complaintService.ts:488:20 - error TS7006: Parameter 'm' implicitly has an 'any' type.
+
+488       members.map((m) => m.userId),
+                       ~
+
+src/services/complaintService.ts:571:23 - error TS7006: Parameter 'i' implicitly has an 'any' type.
+
+571     items: items.map((i) => ({
+                          ~
+
+src/services/complaintService.ts:612:24 - error TS7006: Parameter 's' implicitly has an 'any' type.
+
+612       : closed.reduce((s, c) => s + (c.closedAt!.getTime() - c.createdAt.getTime()), 0) /
+                           ~
+
+src/services/complaintService.ts:612:27 - error TS7006: Parameter 'c' implicitly has an 'any' type.
+
+612       : closed.reduce((s, c) => s + (c.closedAt!.getTime() - c.createdAt.getTime()), 0) /
+                              ~
+
+src/services/mediaService.ts:8:15 - error TS2305: Module '"@prisma/client"' has no exported member 'MediaKind'.
+
+8 import type { MediaKind } from '@prisma/client';
+                ~~~~~~~~~
+
+src/services/notificationService.ts:2:15 - error TS2305: Module '"@prisma/client"' has no exported member 'NotificationType'.
+
+2 import type { NotificationType } from '@prisma/client';
+                ~~~~~~~~~~~~~~~~
+
+src/services/routingService.ts:22:6 - error TS7006: Parameter 'a' implicitly has an 'any' type.
+
+22     (a) => a.jurisdiction.isActive && pointInBounds(lat, lng, a),
+        ~
+
+src/services/routingService.ts:25:17 - error TS7006: Parameter 'a' implicitly has an 'any' type.
+
+25   matches.sort((a, b) => boundsArea(a) - boundsArea(b));
+                   ~
+
+src/services/routingService.ts:25:20 - error TS7006: Parameter 'b' implicitly has an 'any' type.
+
+25   matches.sort((a, b) => boundsArea(a) - boundsArea(b));
+                      ~
+
+src/services/slaService.ts:2:15 - error TS2305: Module '"@prisma/client"' has no exported member 'Priority'.
+
+2 import type { Priority } from '@prisma/client';
+                ~~~~~~~~
+
+tests/authorization.test.ts:3:15 - error TS2305: Module '"@prisma/client"' has no exported member 'Complaint'.
+
+3 import type { Complaint } from '@prisma/client';
+                ~~~~~~~~~
+
+
+Found 46 errors in 11 files.
+
+Errors  Files
+    13  src/controllers/complaintController.ts:23
+     1  src/jobs/slaSweep.ts:2
+     1  src/middleware/auth.ts:2
+     1  src/services/auditService.ts:1
+     3  src/services/authService.ts:3
+    20  src/services/complaintService.ts:1
+     1  src/services/mediaService.ts:8
+     1  src/services/notificationService.ts:2
+     3  src/services/routingService.ts:22
+     1  src/services/slaService.ts:2
+     1  tests/authorization.test.ts:3
+npm error Lifecycle script `typecheck` failed with error:
+npm error code 2
+npm error path C:\civicfix\apps\api
+npm error workspace @civicfix/api@0.1.0
+npm error location C:\civicfix\apps\api
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c tsc --noEmit
+
+
+> @civicfix/web@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @civicfix/shared@0.1.0 typecheck
+> tsc --noEmit
+[exit code 2]

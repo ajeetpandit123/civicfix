@@ -1,0 +1,9 @@
+
+> civicfix@0.1.0 lint
+> npm run lint --workspaces --if-present
+
+
+> @civicfix/api@0.1.0 lint
+> eslint src --ext .ts
+[job lost: its terminal pane went away]
+[exit code 129]

@@ -1,0 +1,639 @@
+  1	import type { Complaint, ComplaintStatus, Prisma, Role, User } from '@prisma/client';
+  2	import {
+  3	  canRoleTransition,
+  4	  computeSystemPriority,
+  5	  mergePriority,
+  6	  type Priority,
+  7	} from '@civicfix/shared';
+  8	import { ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
+  9	import { prisma } from '../lib/prisma.js';
+ 10	import { writeAudit } from './auditService.js';
+ 11	import { nextPublicId } from './idService.js';
+ 12	import { notify, notifyMany } from './notificationService.js';
+ 13	import { routeComplaint } from './routingService.js';
+ 14	import { applySla } from './slaService.js';
+ 15	import { classifySafe, createAiProvider, inputHash } from '../ai/provider.js';
+ 16	import type { Env } from '../config/env.js';
+ 17	
+ 18	const complaintInclude = {
+ 19	  category: true,
+ 20	  subcategory: true,
+ 21	  department: true,
+ 22	  jurisdiction: true,
+ 23	  area: true,
+ 24	  assignedTeam: true,
+ 25	  assignedOfficer: { select: { id: true, name: true, role: true } },
+ 26	  citizen: { select: { id: true, name: true } },
+ 27	  statusHistory: { orderBy: { createdAt: 'asc' as const } },
+ 28	  media: { orderBy: { createdAt: 'asc' as const } },
+ 29	  assignments: { orderBy: { createdAt: 'desc' as const }, take: 10 },
+ 30	} satisfies Prisma.ComplaintInclude;
+ 31	
+ 32	export type Actor = { id: string; role: Role; email: string };
+ 33	
+ 34	export function assertComplaintAccess(actor: Actor, complaint: Complaint): void {
+ 35	  if (actor.role === 'ADMIN') return;
+ 36	  if (actor.role === 'CITIZEN' && complaint.citizenId !== actor.id) {
+ 37	    throw new ForbiddenError();
+ 38	  }
+ 39	}
+ 40	
+ 41	export async function loadAuthorizedComplaint(actor: Actor, id: string) {
+ 42	  const complaint = await prisma.complaint.findFirst({
+ 43	    where: { OR: [{ id }, { publicId: id }], deletedAt: null },
+ 44	    include: {
+ 45	      ...complaintInclude,
+ 46	      comments: {
+ 47	        where: {
+ 48	          deletedAt: null,
+ 49	          ...(actor.role === 'CITIZEN' ? { visibility: 'PUBLIC' as const } : {}),
+ 50	        },
+ 51	        orderBy: { createdAt: 'asc' },
+ 52	        include: { author: { select: { id: true, name: true, role: true } } },
+ 53	      },
+ 54	      aiAnalyses: { orderBy: { createdAt: 'desc' }, take: 3 },
+ 55	      duplicateCandidates: { include: { match: { select: { id: true, publicId: true, title: true, status: true } } } },
+ 56	      escalations: { orderBy: { createdAt: 'asc' } },
+ 57	    },
+ 58	  });
+ 59	  if (!complaint) throw new NotFoundError('Complaint not found');
+ 60	  assertComplaintAccess(actor, complaint);
+ 61	
+ 62	  if (actor.role === 'OFFICER') {
+ 63	    const profile = await prisma.officerProfile.findUnique({ where: { userId: actor.id } });
+ 64	    if (!profile) throw new ForbiddenError();
+ 65	    if (complaint.jurisdictionId && complaint.jurisdictionId !== profile.jurisdictionId) {
+ 66	      throw new ForbiddenError();
+ 67	    }
+ 68	    if (complaint.departmentId && complaint.departmentId !== profile.departmentId) {
+ 69	      throw new ForbiddenError();
+ 70	    }
+ 71	  }
+ 72	
+ 73	  if (actor.role === 'FIELD_WORKER') {
+ 74	    const worker = await prisma.fieldWorkerProfile.findUnique({ where: { userId: actor.id } });
+ 75	    const onTeam = worker?.teamId && complaint.assignedTeamId === worker.teamId;
+ 76	    if (!onTeam) throw new ForbiddenError();
+ 77	  }
+ 78	
+ 79	  return complaint;
+ 80	}
+ 81	
+ 82	export function toCitizenView(complaint: Prisma.ComplaintGetPayload<{ include: typeof complaintInclude }>) {
+ 83	  return {
+ 84	    ...complaint,
+ 85	    latitude: complaint.latitude,
+ 86	    longitude: complaint.longitude,
+ 87	    citizen: { id: complaint.citizen.id, name: complaint.citizen.name },
+ 88	  };
+ 89	}
+ 90	
+ 91	export async function createComplaint(
+ 92	  env: Env,
+ 93	  actor: Actor,
+ 94	  input: {
+ 95	    title: string;
+ 96	    description: string;
+ 97	    categoryId?: string;
+ 98	    subcategoryId?: string;
+ 99	    priority?: Priority;
+100	    latitude: number;
+101	    longitude: number;
+102	    address: string;
+103	    landmark?: string;
+104	    attachToComplaintId?: string;
+105	  },
+106	) {
+107	  if (actor.role !== 'CITIZEN' && actor.role !== 'ADMIN') {
+108	    throw new ForbiddenError('Only citizens can file complaints');
+109	  }
+110	
+111	  let categoryId = input.categoryId;
+112	  const ai = createAiProvider(env);
+113	  const classification = await classifySafe(ai, {
+114	    title: input.title,
+115	    description: input.description,
+116	    address: input.address,
+117	  });
+118	
+119	  if (!categoryId && classification) {
+120	    const cat = await prisma.complaintCategory.findUnique({
+121	      where: { code: classification.category },
+122	    });
+123	    categoryId = cat?.id;
+124	    if (classification.subcategory && cat) {
+125	      const sub = await prisma.complaintSubcategory.findFirst({
+126	        where: { categoryId: cat.id, code: classification.subcategory },
+127	      });
+128	      if (sub && !input.subcategoryId) input.subcategoryId = sub.id;
+129	    }
+130	  }
+131	
+132	  const durationMatch = input.description.match(/(\d+)\s*day/i);
+133	  const system = computeSystemPriority({
+134	    durationDays: durationMatch ? Number(durationMatch[1]) : undefined,
+135	    healthRisk: Boolean(classification?.possible_hazards.includes('public_health')),
+136	    publicSafetyRisk: Boolean(classification?.possible_hazards.includes('public_safety')),
+137	    obstruction: Boolean(classification?.possible_hazards.includes('obstruction')),
+138	    categoryCode: classification?.category,
+139	  });
+140	  const aiPriority = classification?.severity;
+141	  const merged = mergePriority(aiPriority, system.priority);
+142	  const finalPriority = input.priority ?? merged;
+143	
+144	  const routing = await routeComplaint({
+145	    latitude: input.latitude,
+146	    longitude: input.longitude,
+147	    categoryId,
+148	  });
+149	
+150	  const initialStatus: ComplaintStatus =
+151	    routing.kind === 'mapped' ? 'UNDER_REVIEW' : 'ROUTING_PENDING';
+152	
+153	  const publicId = await nextPublicId();
+154	  const complaint = await prisma.complaint.create({
+155	    data: {
+156	      publicId,
+157	      citizenId: actor.id,
+158	      title: input.title,
+159	      description: input.description,
+160	      categoryId,
+161	      subcategoryId: input.subcategoryId,
+162	      priority: finalPriority,
+163	      aiSuggestedPriority: aiPriority,
+164	      status: initialStatus,
+165	      latitude: input.latitude,
+166	      longitude: input.longitude,
+167	      address: input.address,
+168	      landmark: input.landmark,
+169	      areaId: routing.kind === 'mapped' ? routing.areaId : routing.areaId,
+170	      jurisdictionId: routing.kind === 'mapped' ? routing.jurisdictionId : routing.jurisdictionId,
+171	      departmentId: routing.kind === 'mapped' ? routing.departmentId : undefined,
+172	      duplicateOfId: input.attachToComplaintId,
+173	    },
+174	  });
+175	
+176	  await prisma.complaintStatusHistory.create({
+177	    data: {
+178	      complaintId: complaint.id,
+179	      fromStatus: null,
+180	      toStatus: initialStatus,
+181	      actorId: actor.id,
+182	      note:
+183	        routing.kind === 'unmapped'
+184	          ? 'Received. Responsible authority has not yet been configured.'
+185	          : 'Complaint received and routed to responsible department.',
+186	    },
+187	  });
+188	
+189	  if (classification) {
+190	    await prisma.aiAnalysis.create({
+191	      data: {
+192	        complaintId: complaint.id,
+193	        provider: ai.name,
+194	        model: env.AI_MODEL,
+195	        inputHash: inputHash(`${input.title}|${input.description}`),
+196	        rawOutput: classification as object,
+197	        categoryCode: classification.category,
+198	        subcategory: classification.subcategory,
+199	        severity: classification.severity,
+200	        confidence: classification.confidence,
+201	        summary: classification.summary,
+202	        hazards: classification.possible_hazards,
+203	      },
+204	    });
+205	  }
+206	
+207	  await applySla(complaint.id, categoryId, finalPriority);
+208	  await writeAudit({
+209	    actorId: actor.id,
+210	    action: 'complaint.create',
+211	    entityType: 'Complaint',
+212	    entityId: complaint.id,
+213	    metadata: { publicId, routing: routing.kind, mappingId: routing.kind === 'mapped' ? routing.mappingId : undefined },
+214	  });
+215	
+216	  await notify({
+217	    userId: actor.id,
+218	    complaintId: complaint.id,
+219	    type: 'COMPLAINT_RECEIVED',
+220	    title: `Complaint ${publicId} received`,
+221	    body:
+222	      routing.kind === 'mapped'
+223	        ? 'Your complaint was routed to the configured department.'
+224	        : 'Your complaint was received, but the responsible authority has not yet been configured.',
+225	  });
+226	
+227	  if (routing.kind === 'unmapped') {
+228	    const admins = await prisma.user.findMany({ where: { role: 'ADMIN', status: 'ACTIVE' } });
+229	    await notifyMany(
+230	      admins.map((a) => a.id),
+231	      {
+232	        complaintId: complaint.id,
+233	        type: 'ROUTING_PENDING',
+234	        title: `Routing pending for ${publicId}`,
+235	        body: 'No active responsibility mapping exists for this area and category.',
+236	      },
+237	    );
+238	  } else {
+239	    const officers = await prisma.officerProfile.findMany({
+240	      where: {
+241	        isActive: true,
+242	        departmentId: routing.departmentId,
+243	        jurisdictionId: routing.jurisdictionId,
+244	      },
+245	    });
+246	    await notifyMany(
+247	      officers.map((o) => o.userId),
+248	      {
+249	        complaintId: complaint.id,
+250	        type: 'COMPLAINT_RECEIVED',
+251	        title: `New complaint ${publicId}`,
+252	        body: 'A new complaint entered the department queue.',
+253	      },
+254	    );
+255	  }
+256	
+257	  await findDuplicates(complaint.id);
+258	  return loadAuthorizedComplaint(actor, complaint.id);
+259	}
+260	
+261	export async function findDuplicates(complaintId: string) {
+262	  const complaint = await prisma.complaint.findUnique({ where: { id: complaintId } });
+263	  if (!complaint) return [];
+264	
+265	  const nearby = await prisma.complaint.findMany({
+266	    where: {
+267	      id: { not: complaintId },
+268	      deletedAt: null,
+269	      status: { notIn: ['CLOSED', 'REJECTED'] },
+270	      createdAt: { gte: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30) },
+271	    },
+272	    take: 50,
+273	  });
+274	
+275	  const candidates = nearby
+276	    .map((other) => {
+277	      const dLat = complaint.latitude - other.latitude;
+278	      const dLng = complaint.longitude - other.longitude;
+279	      const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+280	      const sameCat = complaint.categoryId && complaint.categoryId === other.categoryId;
+281	      const textScore = overlapScore(complaint.description, other.description);
+282	      let score = 0;
+283	      const reasons: string[] = [];
+284	      if (dist < 0.01) {
+285	        score += 0.45;
+286	        reasons.push('nearby');
+287	      }
+288	      if (sameCat) {
+289	        score += 0.25;
+290	        reasons.push('same_category');
+291	      }
+292	      if (textScore > 0.2) {
+293	        score += Math.min(0.3, textScore);
+294	        reasons.push('similar_text');
+295	      }
+296	      return { other, score, reasons };
+297	    })
+298	    .filter((c) => c.score >= 0.45)
+299	    .sort((a, b) => b.score - a.score)
+300	    .slice(0, 5);
+301	
+302	  await prisma.duplicateCandidate.deleteMany({ where: { sourceId: complaintId } });
+303	  await prisma.duplicateCandidate.createMany({
+304	    data: candidates.map((c) => ({
+305	      sourceId: complaintId,
+306	      matchId: c.other.id,
+307	      score: c.score,
+308	      reasons: c.reasons,
+309	    })),
+310	  });
+311	  return candidates.map((c) => ({
+312	    id: c.other.id,
+313	    publicId: c.other.publicId,
+314	    title: c.other.title,
+315	    score: c.score,
+316	    reasons: c.reasons,
+317	  }));
+318	}
+319	
+320	function overlapScore(a: string, b: string): number {
+321	  const ta = new Set(a.toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+322	  const tb = new Set(b.toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+323	  if (ta.size === 0 || tb.size === 0) return 0;
+324	  let inter = 0;
+325	  for (const w of ta) if (tb.has(w)) inter += 1;
+326	  return inter / Math.min(ta.size, tb.size);
+327	}
+328	
+329	export async function listComplaints(
+330	  actor: Actor,
+331	  query: {
+332	    page: number;
+333	    pageSize: number;
+334	    status?: ComplaintStatus;
+335	    priority?: Priority;
+336	    q?: string;
+337	    categoryId?: string;
+338	    areaId?: string;
+339	    assigned?: string;
+340	    sla?: string;
+341	  },
+342	) {
+343	  const where: Prisma.ComplaintWhereInput = { deletedAt: null };
+344	  if (actor.role === 'CITIZEN') where.citizenId = actor.id;
+345	  if (actor.role === 'FIELD_WORKER') {
+346	    const worker = await prisma.fieldWorkerProfile.findUnique({ where: { userId: actor.id } });
+347	    where.assignedTeamId = worker?.teamId ?? '__none__';
+348	  }
+349	  if (actor.role === 'OFFICER') {
+350	    const profile = await prisma.officerProfile.findUnique({ where: { userId: actor.id } });
+351	    if (profile) {
+352	      where.jurisdictionId = profile.jurisdictionId;
+353	      where.departmentId = profile.departmentId;
+354	    }
+355	  }
+356	  if (query.status) where.status = query.status;
+357	  if (query.priority) where.priority = query.priority;
+358	  if (query.categoryId) where.categoryId = query.categoryId;
+359	  if (query.areaId) where.areaId = query.areaId;
+360	  if (query.assigned === 'unassigned') where.assignedTeamId = null;
+361	  if (query.assigned === 'assigned') where.assignedTeamId = { not: null };
+362	  if (query.sla === 'breached') where.slaDeadline = { lt: new Date() };
+363	  if (query.sla === 'approaching') {
+364	    where.slaDeadline = { gte: new Date(), lte: new Date(Date.now() + 86400000) };
+365	  }
+366	  if (query.q) {
+367	    where.OR = [
+368	      { publicId: { contains: query.q, mode: 'insensitive' } },
+369	      { title: { contains: query.q, mode: 'insensitive' } },
+370	      { address: { contains: query.q, mode: 'insensitive' } },
+371	    ];
+372	  }
+373	
+374	  const [total, items] = await prisma.$transaction([
+375	    prisma.complaint.count({ where }),
+376	    prisma.complaint.findMany({
+377	      where,
+378	      include: {
+379	        category: true,
+380	        department: true,
+381	        area: true,
+382	        assignedTeam: true,
+383	        assignedOfficer: { select: { id: true, name: true } },
+384	      },
+385	      orderBy: { createdAt: 'desc' },
+386	      skip: (query.page - 1) * query.pageSize,
+387	      take: query.pageSize,
+388	    }),
+389	  ]);
+390	
+391	  return { total, page: query.page, pageSize: query.pageSize, items };
+392	}
+393	
+394	export async function transitionStatus(
+395	  actor: Actor,
+396	  complaintId: string,
+397	  to: ComplaintStatus,
+398	  note?: string,
+399	) {
+400	  const complaint = await loadAuthorizedComplaint(actor, complaintId);
+401	  if (!canRoleTransition(actor.role, complaint.status, to)) {
+402	    throw new ValidationError(`Cannot transition from ${complaint.status} to ${to}`);
+403	  }
+404	
+405	  const data: Prisma.ComplaintUpdateInput = { status: to };
+406	  if (to === 'RESOLVED') data.resolvedAt = new Date();
+407	  if (to === 'REOPENED') data.reopenedAt = new Date();
+408	  if (to === 'CLOSED') data.closedAt = new Date();
+409	
+410	  const updated = await prisma.complaint.update({
+411	    where: { id: complaint.id },
+412	    data,
+413	  });
+414	  await prisma.complaintStatusHistory.create({
+415	    data: {
+416	      complaintId: complaint.id,
+417	      fromStatus: complaint.status,
+418	      toStatus: to,
+419	      actorId: actor.id,
+420	      note,
+421	    },
+422	  });
+423	  await writeAudit({
+424	    actorId: actor.id,
+425	    action: 'complaint.status',
+426	    entityType: 'Complaint',
+427	    entityId: complaint.id,
+428	    metadata: { from: complaint.status, to, note },
+429	  });
+430	  await notify({
+431	    userId: complaint.citizenId,
+432	    complaintId: complaint.id,
+433	    type: to === 'REOPENED' ? 'COMPLAINT_REOPENED' : 'STATUS_CHANGED',
+434	    title: `${complaint.publicId} is now ${to.replaceAll('_', ' ')}`,
+435	    body: note ?? `Status changed to ${to}`,
+436	  });
+437	  return updated;
+438	}
+439	
+440	export async function assignComplaint(
+441	  actor: Actor,
+442	  complaintId: string,
+443	  input: { officerId?: string; teamId?: string; note?: string },
+444	) {
+445	  if (actor.role !== 'OFFICER' && actor.role !== 'ADMIN') throw new ForbiddenError();
+446	  const complaint = await loadAuthorizedComplaint(actor, complaintId);
+447	  if (!canRoleTransition(actor.role, complaint.status, 'ASSIGNED')) {
+448	    throw new ValidationError(`Cannot assign from status ${complaint.status}`);
+449	  }
+450	
+451	  await prisma.complaintAssignment.updateMany({
+452	    where: { complaintId: complaint.id, status: 'PENDING' },
+453	    data: { status: 'REASSIGNED' },
+454	  });
+455	
+456	  await prisma.complaintAssignment.create({
+457	    data: {
+458	      complaintId: complaint.id,
+459	      assignedById: actor.id,
+460	      officerId: input.officerId,
+461	      teamId: input.teamId,
+462	      note: input.note,
+463	      status: 'PENDING',
+464	    },
+465	  });
+466	
+467	  await prisma.complaint.update({
+468	    where: { id: complaint.id },
+469	    data: {
+470	      assignedOfficerId: input.officerId,
+471	      assignedTeamId: input.teamId,
+472	      status: 'ASSIGNED',
+473	    },
+474	  });
+475	  await prisma.complaintStatusHistory.create({
+476	    data: {
+477	      complaintId: complaint.id,
+478	      fromStatus: complaint.status,
+479	      toStatus: 'ASSIGNED',
+480	      actorId: actor.id,
+481	      note: input.note,
+482	    },
+483	  });
+484	
+485	  if (input.teamId) {
+486	    const members = await prisma.fieldWorkerProfile.findMany({ where: { teamId: input.teamId } });
+487	    await notifyMany(
+488	      members.map((m) => m.userId),
+489	      {
+490	        complaintId: complaint.id,
+491	        type: 'COMPLAINT_ASSIGNED',
+492	        title: `Assigned ${complaint.publicId}`,
+493	        body: 'A new field assignment is waiting for acceptance.',
+494	      },
+495	    );
+496	  }
+497	  await notify({
+498	    userId: complaint.citizenId,
+499	    complaintId: complaint.id,
+500	    type: 'COMPLAINT_ASSIGNED',
+501	    title: `${complaint.publicId} assigned`,
+502	    body: 'A field team has been assigned where configured.',
+503	  });
+504	  return loadAuthorizedComplaint(actor, complaint.id);
+505	}
+506	
+507	export async function addComment(
+508	  actor: Actor,
+509	  complaintId: string,
+510	  body: string,
+511	  visibility: 'PUBLIC' | 'INTERNAL',
+512	) {
+513	  const complaint = await loadAuthorizedComplaint(actor, complaintId);
+514	  if (actor.role === 'CITIZEN' && visibility === 'INTERNAL') throw new ForbiddenError();
+515	  const comment = await prisma.complaintComment.create({
+516	    data: {
+517	      complaintId: complaint.id,
+518	      authorId: actor.id,
+519	      body,
+520	      visibility: actor.role === 'CITIZEN' ? 'PUBLIC' : visibility,
+521	    },
+522	  });
+523	  if (visibility === 'PUBLIC' && actor.id !== complaint.citizenId) {
+524	    await notify({
+525	      userId: complaint.citizenId,
+526	      complaintId: complaint.id,
+527	      type: 'COMMENT_RECEIVED',
+528	      title: `Update on ${complaint.publicId}`,
+529	      body: 'A new comment was added.',
+530	    });
+531	  }
+532	  return comment;
+533	}
+534	
+535	export async function verifyResolution(
+536	  actor: Actor,
+537	  complaintId: string,
+538	  resolved: boolean,
+539	  reason?: string,
+540	) {
+541	  if (actor.role !== 'CITIZEN') throw new ForbiddenError();
+542	  const complaint = await loadAuthorizedComplaint(actor, complaintId);
+543	  if (complaint.citizenId !== actor.id) throw new ForbiddenError();
+544	  const to = resolved ? 'CLOSED' : 'REOPENED';
+545	  return transitionStatus(actor, complaint.id, to, reason);
+546	}
+547	
+548	export async function listPublicIssues(page: number, pageSize: number) {
+549	  const where = { deletedAt: null, status: { not: 'REJECTED' as const } };
+550	  const [total, items] = await prisma.$transaction([
+551	    prisma.complaint.count({ where }),
+552	    prisma.complaint.findMany({
+553	      where,
+554	      select: {
+555	        publicId: true,
+556	        status: true,
+557	        priority: true,
+558	        createdAt: true,
+559	        latitude: true,
+560	        longitude: true,
+561	        category: { select: { name: true, code: true } },
+562	        area: { select: { name: true } },
+563	      },
+564	      orderBy: { createdAt: 'desc' },
+565	      skip: (page - 1) * pageSize,
+566	      take: pageSize,
+567	    }),
+568	  ]);
+569	  return {
+570	    total,
+571	    items: items.map((i) => ({
+572	      ...i,
+573	      latitude: Math.round(i.latitude * 1000) / 1000,
+574	      longitude: Math.round(i.longitude * 1000) / 1000,
+575	    })),
+576	  };
+577	}
+578	
+579	export async function analyticsSummary() {
+580	  const [total, open, resolved, reopened, duplicates] = await Promise.all([
+581	    prisma.complaint.count({ where: { deletedAt: null } }),
+582	    prisma.complaint.count({
+583	      where: { deletedAt: null, status: { notIn: ['CLOSED', 'REJECTED'] } },
+584	    }),
+585	    prisma.complaint.count({ where: { deletedAt: null, status: 'CLOSED' } }),
+586	    prisma.complaint.count({ where: { deletedAt: null, reopenedAt: { not: null } } }),
+587	    prisma.duplicateCandidate.count(),
+588	  ]);
+589	  const byCategory = await prisma.complaint.groupBy({
+590	    by: ['categoryId'],
+591	    _count: { _all: true },
+592	    where: { deletedAt: null },
+593	  });
+594	  const byPriority = await prisma.complaint.groupBy({
+595	    by: ['priority'],
+596	    _count: { _all: true },
+597	    where: { deletedAt: null },
+598	  });
+599	  const byArea = await prisma.complaint.groupBy({
+600	    by: ['areaId'],
+601	    _count: { _all: true },
+602	    where: { deletedAt: null },
+603	  });
+604	  const closed = await prisma.complaint.findMany({
+605	    where: { deletedAt: null, closedAt: { not: null } },
+606	    select: { createdAt: true, closedAt: true },
+607	    take: 500,
+608	  });
+609	  const avgMs =
+610	    closed.length === 0
+611	      ? 0
+612	      : closed.reduce((s, c) => s + (c.closedAt!.getTime() - c.createdAt.getTime()), 0) /
+613	        closed.length;
+614	  const slaBreached = await prisma.complaint.count({
+615	    where: {
+616	      deletedAt: null,
+617	      slaDeadline: { lt: new Date() },
+618	      status: { notIn: ['CLOSED', 'REJECTED'] },
+619	    },
+620	  });
+621	  const slaTotal = await prisma.complaint.count({
+622	    where: { deletedAt: null, slaDeadline: { not: null } },
+623	  });
+624	  return {
+625	    total,
+626	    open,
+627	    resolved,
+628	    reopened,
+629	    duplicates,
+630	    avgResolutionHours: avgMs / 36e5,
+631	    slaCompliance:
+632	      slaTotal === 0 ? 1 : Math.max(0, 1 - slaBreached / slaTotal),
+633	    byCategory,
+634	    byPriority,
+635	    byArea,
+636	  };
+637	}
+638	
+639	export type { User };

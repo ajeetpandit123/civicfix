@@ -1,0 +1,15 @@
+Started in the background as job "vt-1790729939904-5" in terminal "main-84pfrs-2".
+
+(still running after 8s — moved to background as job vt-1790729939904-5 in terminal "main-84pfrs-2"; you'll get a tool result when it finishes)
+It's running in the Cana Agent terminal (separate from the user's). You are NOT blocked — you'll receive a terminal-job-done result automatically when it finishes. Do not poll in a loop; use TERMINAL_READ (or poll once) only if you need intermediate output. NOTE: terminal "main-84pfrs" was busy, so this ran on "main-84pfrs-2" — target that name for TERMINAL_READ/TERMINAL_WRITE.
+
+Your background jobs still running (2):
+- vt-1790729939904-5  terminal="main-84pfrs-2"  running 9s
+    npm run test --workspace=@civicfix/shared
+    │ (no output yet)
+- vt-1790729917941-1  terminal="main-84pfrs"  running 31s
+    npm run typecheck
+    │ > npm run typecheck --workspaces --if-present
+    │ > @civicfix/api@0.1.0 typecheck
+    │ > tsc --noEmit
+A job you no longer need should be stopped, not left running.

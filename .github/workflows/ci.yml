@@ -1,0 +1,50 @@
+name: civicfix-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: civicfix
+          POSTGRES_PASSWORD: civicfix
+          POSTGRES_DB: civicfix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U civicfix"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://civicfix:civicfix@localhost:5432/civicfix?schema=public
+      JWT_ACCESS_SECRET: ci-access-secret-min-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-min-32-characters
+      WEB_ORIGIN: http://localhost:3000
+      API_PUBLIC_URL: http://localhost:4000
+      AI_PROVIDER: mock
+      STORAGE_DRIVER: local
+      EMAIL_DRIVER: console
+      GEOCODER_PROVIDER: none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          API_INTERNAL_URL: http://localhost:4000

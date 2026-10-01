@@ -1,0 +1,52 @@
+
+> civicfix@0.1.0 lint
+> npm run lint --workspaces --if-present
+
+
+> @civicfix/api@0.1.0 lint
+> eslint src --ext .ts
+
+
+C:\civicfix\apps\api\src\middleware\auth.ts
+  9:3  error  ES2015 module syntax is preferred over namespaces  @typescript-eslint/no-namespace
+
+C:\civicfix\apps\api\src\middleware\errorHandler.ts
+  5:73  error  '_next' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\civicfix\apps\api\src\middleware\requestId.ts
+  5:3  error  ES2015 module syntax is preferred over namespaces  @typescript-eslint/no-namespace
+
+C:\civicfix\apps\api\src\services\complaintService.ts
+  165:21  error  '_rawOutput' is defined but never used  @typescript-eslint/no-unused-vars
+  165:44  error  '_inputHash' is defined but never used  @typescript-eslint/no-unused-vars
+  170:17  error  '_score' is defined but never used      @typescript-eslint/no-unused-vars
+  170:34  error  '_reasons' is defined but never used    @typescript-eslint/no-unused-vars
+
+✖ 7 problems (7 errors, 0 warnings)
+
+npm error Lifecycle script `lint` failed with error:
+npm error code 1
+npm error path C:\civicfix\apps\api
+npm error workspace @civicfix/api@0.1.0
+npm error location C:\civicfix\apps\api
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c eslint src --ext .ts
+
+
+> @civicfix/web@0.1.0 lint
+> next lint
+
+`next lint` is deprecated and will be removed in Next.js 16.
+For new projects, use create-next-app to choose your preferred linter.
+For existing projects, migrate to the ESLint CLI:
+npx @next/codemod@canary next-lint-to-eslint-cli .
+
+
+./src/app/officer/dashboard/page.tsx
+9:10  Warning: 'Input' is defined but never used.  @typescript-eslint/no-unused-vars
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+
+> @civicfix/shared@0.1.0 lint
+> eslint src --ext .ts
+[exit code 1]

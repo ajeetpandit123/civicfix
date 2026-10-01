@@ -1,0 +1,8 @@
+{{.Image}}\t{{.Status}}' 2>&1 | head -20
+v24.18.0
+11.16.0
+client
+client  config  debug  engines  engines-version  fetch-engine  get-platform
+failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/docke
+rDesktopLinuxEngine: The system cannot find the file specified.
+[exit code 0]

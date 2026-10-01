@@ -1,0 +1,204 @@
+$ npm run test --workspace=@civicfix/shared
+
+> @civicfix/shared@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 C:/civicfix/packages/shared
+
+ ✓ src/sla.test.ts (2 tests) 14ms
+ ✓ src/statusMachine.test.ts (6 tests) 14ms
+ ✓ src/priority.test.ts (2 tests) 12ms
+
+ Test Files  3 passed (3)
+      Tests  10 passed (10)
+   Start at  11:30:01
+   Duration  2.45s (transform 780ms, setup 0ms, collect 1.26s, tests 41ms, environment 1ms, prepare 2.49s)
+$ npm run db:generate   [ran in "main-84pfrs-2"]
+
+> civicfix@0.1.0 db:generate
+> npm run prisma:generate --workspace=@civicfix/api
+
+
+> @civicfix/api@0.1.0 prisma:generate
+> prisma generate
+
+warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.confi
+g.ts`).
+For more information, see: https://pris.ly/prisma-config
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+
+✔ Generated Prisma Client (v6.19.3) to .\..\..\node_modules\@prisma\client in 1.16s
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+$ npm run db:generate && npm run typecheck
+
+> civicfix@0.1.0 db:generate
+> npm run prisma:generate --workspace=@civicfix/api
+
+
+> @civicfix/api@0.1.0 prisma:generate
+> prisma generate
+
+warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.confi
+g.ts`).
+For more information, see: https://pris.ly/prisma-config
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+┌─────────────────────────────────────────────────────────┐
+│  Update available 6.19.3 -> 8.0.0-rc.19                 │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+
+✔ Generated Prisma Client (v6.19.3) to .\..\..\node_modules\@prisma\client in 1.11s
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+
+> civicfix@0.1.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+
+> @civicfix/api@0.1.0 typecheck
+> tsc --noEmit
+
+src/controllers/adminController.ts:78:56 - error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+
+78       const user = await prisma.user.update({ where: { id: req.params.id }, data: body });
+                                                          ~~
+
+  ../../node_modules/.prisma/client/index.d.ts:35324:5
+    35324     id?: string
+              ~~
+    The expected type comes from property 'id' which is declared here on type 'UserWhereUniqueInput'
+
+src/controllers/adminController.ts:93:68 - error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+
+93       const department = await prisma.department.update({ where: { id: req.params.id }, data: body });
+                                                                      ~~
+
+  ../../node_modules/.prisma/client/index.d.ts:35842:5
+    35842     id?: string
+              ~~
+    The expected type comes from property 'id' which is declared here on type 'DepartmentWhereUniqueInput'
+
+src/controllers/complaintController.ts:48:66 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+48       const complaint = await loadAuthorizedComplaint(req.user!, req.params.id);
+                                                                    ~~~~~~~~~~~~~
+
+src/controllers/complaintController.ts:52:42 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+52       const items = await findDuplicates(req.params.id);
+                                            ~~~~~~~~~~~~~
+
+src/controllers/complaintController.ts:57:59 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+57       const complaint = await transitionStatus(req.user!, req.params.id, body.status, body.note);
+                                                             ~~~~~~~~~~~~~
+
+src/controllers/complaintController.ts:62:58 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+62       const complaint = await assignComplaint(req.user!, req.params.id, body);
+                                                            ~~~~~~~~~~~~~
+
+src/controllers/complaintController.ts:67:51 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+67       const comment = await addComment(req.user!, req.params.id, body.body, body.visibility);
+                                                     ~~~~~~~~~~~~~
+
+src/controllers/complaintController.ts:72:59 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+72       const complaint = await verifyResolution(req.user!, req.params.id, body.resolved, body.reason);
+                                                             ~~~~~~~~~~~~~
+
+src/controllers/complaintController.ts:78:9 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+78         req.params.id,
+           ~~~~~~~~~~~~~
+
+src/controllers/complaintController.ts:85:59 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+85       const complaint = await transitionStatus(req.user!, req.params.id, 'RESOLVED', req.body?.note);
+                                                             ~~~~~~~~~~~~~
+
+src/controllers/complaintController.ts:95:62 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+95       const media = await saveComplaintMedia(env, req.user!, req.params.id, file, kind);
+                                                                ~~~~~~~~~~~~~
+
+src/controllers/complaintController.ts:99:67 - error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+99       const { bytes, mimeType } = await readMedia(env, req.user!, req.params.mediaId);
+                                                                     ~~~~~~~~~~~~~~~~~~
+
+src/routes/adminRoutes.ts:87:18 - error TS2322: Type 'string | string[]' is not assignable to type 'string | StringFilter<"Notification"> | undefined'.
+  Type 'string[]' is not assignable to type 'string | StringFilter<"Notification"> | undefined'.
+
+87         where: { id: req.params.id, userId: req.user!.id },
+                    ~~
+
+src/services/auditService.ts:18:7 - error TS2322: Type 'Record<string, unknown> | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonVa
+lue | undefined'.
+  Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+    Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+
+18       metadata: input.metadata,
+         ~~~~~~~~
+
+  ../../node_modules/.prisma/client/index.d.ts:39357:5
+    39357     metadata?: NullableJsonNullValueInput | InputJsonValue
+              ~~~~~~~~
+    The expected type comes from property 'metadata' which is declared here on type '(Without<AuditLogCreateInput, AuditLogUncheckedCreateInput> & AuditLogUnche
+ckedCreateInput) | (Without<...> & AuditLogCreateInput)'
+
+
+Found 14 errors in 4 files.
+
+Errors  Files
+     2  src/controllers/adminController.ts:78
+    10  src/controllers/complaintController.ts:48
+     1  src/routes/adminRoutes.ts:87
+     1  src/services/auditService.ts:18
+npm error Lifecycle script `typecheck` failed with error:
+npm error code 2
+npm error path C:\civicfix\apps\api
+npm error workspace @civicfix/api@0.1.0
+npm error location C:\civicfix\apps\api
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c tsc --noEmit
+
+
+> @civicfix/web@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @civicfix/shared@0.1.0 typecheck
+> tsc --noEmit
+$ npm test
+[job never started: its command did not reach the terminal's shell]

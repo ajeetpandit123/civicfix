@@ -1,0 +1,45 @@
+
+> civicfix@0.1.0 build
+> npm run build --workspaces --if-present
+
+
+> @civicfix/api@0.1.0 build
+> tsc -p tsconfig.build.json
+
+
+> @civicfix/web@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.26
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 3.8min
+
+./src/app/officer/dashboard/page.tsx
+9:10  Warning: 'Input' is defined but never used.  @typescript-eslint/no-unused-vars
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+ ✓ Linting and checking validity of types
+ ✓ Collecting page data
+ ✓ Generating static pages (20/20)
+
+> Build error occurred
+[Error: ENOENT: no such file or directory, rename 'C:\civicfix\apps\web\.next\export\500.html' -> 'C:\civicfix\apps\web\.next\server\pages\500.html'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'rename',
+  path: 'C:\\civicfix\\apps\\web\\.next\\export\\500.html',
+  dest: 'C:\\civicfix\\apps\\web\\.next\\server\\pages\\500.html'
+}
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path C:\civicfix\apps\web
+npm error workspace @civicfix/web@0.1.0
+npm error location C:\civicfix\apps\web
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c next build
+
+
+> @civicfix/shared@0.1.0 build
+> tsc -p tsconfig.build.json
+[exit code 1]

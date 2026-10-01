@@ -1,0 +1,27 @@
+$ npm run build
+
+> civicfix@0.1.0 build
+> npm run build --workspaces --if-present
+
+
+> @civicfix/api@0.1.0 build
+> tsc -p tsconfig.build.json
+
+
+> @civicfix/web@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.26
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 2.2min
+
+./src/app/officer/dashboard/page.tsx
+9:10  Warning: 'Input' is defined but never used.  @typescript-eslint/no-unused-vars
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+ ✓ Linting and checking validity of types
+ ✓ Collecting page data
+ ✓ Generating static pages (20/20)
+   Collecting build traces  ...
+[job vt-1790814390334-249 STILL RUNNING (511s): npm run build - its completion result arrives automatically. Do NOT read this terminal again for this job: END YOUR TURN now and you will be woken when it finishes.]

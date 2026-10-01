@@ -1,0 +1,8 @@
+node_modules
+.git
+.next
+dist
+uploads
+*.md
+.cocreate
+apps/web/e2e

@@ -1,0 +1,24 @@
+{
+  "completed_at": null,
+  "document_type": "episode",
+  "episode_id": "episode-20261001T002506Z-5916a098",
+  "input": {
+    "contract_sha256": "6ad125eb1a34216226aa360b757d65564409fea3464ed48ba1ade1bc44c02533"
+  },
+  "metadata": {
+    "source_cursor": {
+      "conversation_generation": 0,
+      "last_message_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "message_count": 0,
+      "session_file": "C:\\civicfix\\.cocreate\\sessions\\session-7127669827249f3487ebbf72.jsonl"
+    }
+  },
+  "objective": "Review the file C:\\civicfix\\apps\\web\\src\\app\\worker\\dashboard\\page.tsx and answer ONE claim with exact file:line citations.\n\nCLAIM: the worker dashboard (1) shows a 'Decline' action only when the complaint status is 'ASSIGNED', (2) gates the 'Mark complete' action behind an uploaded 'AFTER' photo for that task, and (3) keeps its progress note per-task rather than one shared note across all tasks.\n\nRead the file yourself and verify each of the three parts against the real code. Quote the exact lines that prove or disprove each part. Answer each part as CONFIRMED or REFUTED with path:line evidence. Do not edit anything — this is a read-only review. Also state the API endpoints the page calls and whether the note text is sent with each status mutation.",
+  "output": null,
+  "run_id": "session-7127669827249f3487ebbf72",
+  "schema_version": 1,
+  "started_at": "2026-10-01T00:25:06.258Z",
+  "status": "active",
+  "summary": "",
+  "updated_at": "2026-10-01T00:25:06.258Z"
+}

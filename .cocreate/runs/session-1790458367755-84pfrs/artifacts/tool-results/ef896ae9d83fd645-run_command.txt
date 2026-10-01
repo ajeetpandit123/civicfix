@@ -1,0 +1,12 @@
+Started in the background as job "vt-1790816691156-393" in terminal "chk-safety-84pfrs".
+(started in background as job vt-1790816691156-393 in terminal "chk-safety-84pfrs" — you'll get a tool result when it finishes; TERMINAL_READ or poll to check sooner)
+It's running in the Cana Agent terminal (separate from the user's). You are NOT blocked — you'll receive a terminal-job-done result automatically when it finishes. Do not poll in a loop; use TERMINAL_READ (or poll once) only if you need intermediate output.
+
+Your background jobs still running (2):
+- vt-1790816691156-393  terminal="chk-safety-84pfrs"  running 0s
+    grep -q 'CODE WORK' docs/manual-setup-checklist.md && grep -q 'CivicFix!demo1' docs/manual-setup-checklist.md && echo SAFETY_OK
+    │ (no output yet)
+- vt-1790816683372-390  terminal="chk-headings-84pfrs"  running 8s
+    grep -c '^## ' docs/manual-setup-checklist.md
+    │ (no output yet)
+A job you no longer need should be stopped, not left running.

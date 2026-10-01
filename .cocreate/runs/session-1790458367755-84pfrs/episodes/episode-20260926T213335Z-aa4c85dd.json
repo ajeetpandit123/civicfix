@@ -1,0 +1,24 @@
+{
+  "completed_at": null,
+  "document_type": "episode",
+  "episode_id": "episode-20260926T213335Z-aa4c85dd",
+  "input": {
+    "contract_sha256": "bf63abf9680c6e78a228057932d41adbccd821f7395d597b66ef04e548f276fc"
+  },
+  "metadata": {
+    "source_cursor": {
+      "conversation_generation": 0,
+      "last_message_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "message_count": 0,
+      "session_file": "C:\\civicfix\\.cocreate\\sessions\\session-1790458367755-84pfrs.jsonl"
+    }
+  },
+  "objective": "# CIVICFIX — PRODUCTION-GRADE AI-POWERED CIVIC ISSUE REPORTING PLATFORM\n\n## 0. ROLE\n\nYou are acting as a **Senior Full-Stack Software Architect, Senior MERN/Next.js Engineer, AI Engineer, QA Engineer, Security Engineer, and DevOps Engineer**.\n\nYour job is to design and build a production-quality application called **CivicFix**.\n\nDo NOT treat this as a college CRUD project.\n\nThe goal is to build a realistic, scalable civic issue reporting and resolution platform that could eventually be used by citizens and authorized municipal/organizational authorities.\n\nYou must prioritize:\n\n* correctness\n* maintainability\n* security\n* clean architecture\n* production-ready UX\n* real-world workflows\n* testing\n* observability\n* proper error handling\n* AI used only where it provides genuine value\n\nDo not generate fake complexity just to make the project look impressive.\n\n---\n\n# 1. PRODUCT VISION\n\nCivicFix allows citizens to report real-world local problems such as:\n\n* garbage not being collected\n* potholes\n* damaged roads\n* broken streetlights\n* overflowing drains\n* water leakage\n* illegal dumping\n* damaged public infrastructure\n* other configurable civic problems\n\nA citizen should be able to:\n\n1. create an account\n2. submit a complaint\n3. upload photographs\n4. select or detect the location\n5. describe the problem\n6. receive an AI-assisted category and priority suggestion\n7. submit the complaint\n8. see which jurisdiction/department is responsible\n9. see the currently assigned officer/team when assignment exists\n10. track the complete complaint lifecycle\n11. receive notifications\n12. verify whether the issue was actually resolved\n13. reopen/escalate a complaint when appropriate\n\nAuthorities should be able to:\n\n1. manage jurisdictions\n2. manage departments\n3. manage officers\n4. manage field teams\n5. configure responsibility mappings\n6. review complaints\n7. assign complaints\n8. change status\n9. communicate with citizens\n10. monitor SLA/escalation conditions\n11. view analytics\n12. mainta",
+  "output": null,
+  "run_id": "session-1790458367755-84pfrs",
+  "schema_version": 1,
+  "started_at": "2026-09-26T21:33:35.360Z",
+  "status": "active",
+  "summary": "",
+  "updated_at": "2026-09-26T21:33:35.360Z"
+}

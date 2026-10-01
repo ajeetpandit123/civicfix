@@ -1,0 +1,3 @@
+
+[job lost: its terminal pane went away]
+[exit code 129]

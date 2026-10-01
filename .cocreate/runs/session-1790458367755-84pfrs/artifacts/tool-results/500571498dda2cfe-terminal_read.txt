@@ -1,0 +1,9 @@
+$ npm test -- mediaPolicy
+
+> civicfix@0.1.0 test
+> npm run test --workspaces --if-present mediaPolicy
+
+
+> @civicfix/api@0.1.0 test
+> vitest run mediaPolicy
+[job vt-1790797471147-67 STILL RUNNING (72s): npm test -- mediaPolicy - its completion result arrives automatically. Do NOT read this terminal again for this job: END YOUR TURN now and you will be woken when it finishes.]

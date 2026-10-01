@@ -1,0 +1,5 @@
+$ npm test
+
+> civicfix@0.1.0 test
+> npm run test --workspaces --if-present
+[job vt-1790815780546-378 STILL RUNNING (27s): npm test - its completion result arrives automatically. Do NOT read this terminal again for this job: END YOUR TURN now and you will be woken when it finishes.]

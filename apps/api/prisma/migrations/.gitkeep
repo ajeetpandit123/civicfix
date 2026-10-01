@@ -1,0 +1,2 @@
+# Keep Prisma migrations in git. Generate with:
+# npx prisma migrate diff --from-empty --to-schema-datamodel apps/api/prisma/schema.prisma --script

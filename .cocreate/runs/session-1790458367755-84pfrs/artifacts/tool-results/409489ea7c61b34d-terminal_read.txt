@@ -1,0 +1,13 @@
+$ npm run typecheck
+
+> civicfix@0.1.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+
+> @civicfix/api@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @civicfix/web@0.1.0 typecheck
+> tsc --noEmit
+[job vt-1790797239374-34 STILL RUNNING (70s): npm run typecheck - its completion result arrives automatically. Do NOT read this terminal again for this job: END YOUR TURN now and you will be woken when it finishes.]

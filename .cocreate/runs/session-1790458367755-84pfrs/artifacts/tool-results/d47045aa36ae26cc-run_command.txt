@@ -1,0 +1,13 @@
+Started in the background as job "vt-1790797373670-54" in terminal "lint-84pfrs".
+(started in background as job vt-1790797373670-54 in terminal "lint-84pfrs" — you'll get a tool result when it finishes; TERMINAL_READ or poll to check sooner)
+It's running in the Cana Agent terminal (separate from the user's). You are NOT blocked — you'll receive a terminal-job-done result automatically when it finishes. Do not poll in a loop; use TERMINAL_READ (or poll once) only if you need intermediate output.
+
+Your background jobs still running (2):
+- vt-1790797373670-54  terminal="lint-84pfrs"  running 1s
+    npm run lint
+    │ (no output yet)
+- vt-1790797319466-45  terminal="migrate-84pfrs"  running 52s
+    mkdir -p apps/api/prisma/migrations/0001_init && npx prisma migrate diff --from-empty --to-schema-datamodel apps/api/prisma/schema.prisma --script > apps/api/prisma/migrations/0001_init/migration.sql && printf 'provider = "postgresql"\n' > apps/api/prisma/migrations/migration_lock.toml && wc -l apps/api/prisma/migrations/0001_init/migration.sql
+    │ prisma/migrations/0001_init/migration.sql && printf 'provider = "postgresql"\n' > apps/api/prisma/migrations/migration_lock.toml && wc -l apps/api/prisma/migrat
+    │ ions/0001_init/migration.sql
+A job you no longer need should be stopped, not left running.

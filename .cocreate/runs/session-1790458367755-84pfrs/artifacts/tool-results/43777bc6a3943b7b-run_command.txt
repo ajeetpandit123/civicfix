@@ -1,0 +1,15 @@
+Started in the background as job "vt-1790815340146-346" in terminal "main-84pfrs".
+
+(still running after 8s — moved to background as job vt-1790815340146-346 in terminal "main-84pfrs"; you'll get a tool result when it finishes)
+It's running in the Cana Agent terminal (separate from the user's). You are NOT blocked — you'll receive a terminal-job-done result automatically when it finishes. Do not poll in a loop; use TERMINAL_READ (or poll once) only if you need intermediate output.
+
+Your background jobs still running (2):
+- vt-1790815340146-346  terminal="main-84pfrs"  running 9s
+    npm test
+    │ (no output yet)
+- vt-1790815191573-329  terminal="buildfinal-84pfrs"  running 2m38s
+    npm run build
+    │    Creating an optimized production build ...
+    │  ✓ Compiled successfully in 29.7s
+    │    Linting and checking validity of types  ..
+A job you no longer need should be stopped, not left running.

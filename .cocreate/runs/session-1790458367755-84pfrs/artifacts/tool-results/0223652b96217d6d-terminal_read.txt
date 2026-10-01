@@ -1,0 +1,27 @@
+$ npm test
+
+> civicfix@0.1.0 test
+> npm run test --workspaces --if-present
+
+
+> @civicfix/api@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 C:/civicfix/apps/api
+
+ ✓ tests/authorization.test.ts (6 tests) 20ms
+ ✓ tests/assignmentEffects.test.ts (8 tests) 19ms
+ ✓ tests/responseShaping.test.ts (6 tests) 31ms
+ ✓ tests/routing.contract.test.ts (1 test) 15ms
+ ✓ tests/env.test.ts (2 tests) 29ms
+ ✓ tests/mediaPolicy.test.ts (7 tests) 24ms
+
+ ❯ tests/integration.auth.test.ts [queued]
+ ❯ tests/integration.lifecycle.test.ts [queued]
+
+ Test Files 6 passed (8)
+      Tests 30 passed (30)
+   Start at 16:25:41
+   Duration 21.70s
+[job vt-1790814294349-235 STILL RUNNING (66s): npm test - its completion result arrives automatically. Do NOT read this terminal again for this job: END YOUR TURN now and you will be woken when it finishes.]

@@ -1,0 +1,15 @@
+
+> @civicfix/api@0.1.0 test
+> vitest run assignmentEffects authorization
+
+
+ RUN  v3.2.7 C:/civicfix/apps/api
+
+ ✓ tests/authorization.test.ts (6 tests) 20ms
+ ✓ tests/assignmentEffects.test.ts (8 tests) 18ms
+
+ Test Files  2 passed (2)
+      Tests  14 passed (14)
+   Start at  16:19:05
+   Duration  35.51s (transform 19.05s, setup 0ms, collect 50.55s, tests 38ms, environment 3ms, prepare 6.42s)
+[exit code 0]

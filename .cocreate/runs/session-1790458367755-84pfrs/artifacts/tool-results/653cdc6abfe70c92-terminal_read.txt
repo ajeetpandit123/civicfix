@@ -1,0 +1,28 @@
+$ node -v && npm -v && ls node_modules/.prisma 2>/dev/null; ls node_modules/@prisma 2>/dev/null; ls apps/api/prisma/migrations; docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' 2>&1 | head -20
+{{.Image}}\t{{.Status}}' 2>&1 | head -20
+v24.18.0
+11.16.0
+client
+client  config  debug  engines  engines-version  fetch-engine  get-platform
+failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/docke
+rDesktopLinuxEngine: The system cannot find the file specified.
+$ powershell -NoProfile -Command "Test-NetConnection -ComputerName localhost -Port 5432 -InformationLevel Quiet" 2>&1 | tail -3; echo "---psql---"; which psql pg_ctl docker 2>&1; echo "---node_modules---"; ls node_modules | wc -l; ls apps/web/.next 2>/dev/null | head -3; echo "---sharp---"; ls node_modules/sharp >/dev/null 2>&1 && echo sharp-ok || echo sharp-missing
+g_ctl docker 2>&1; echo "---node_modules---"; ls node_modules | wc -l; ls apps/web/.next 2>/dev/null | head -3; echo "---sharp---"; ls node_modules/sharp >/dev/
+null 2>&1 && echo sharp-ok || echo sharp-missing
+True
+---psql---
+which: no psql in (/c/Users/intel/bin:/mingw64/bin:/usr/local/bin:/usr/bin:/bin:/mingw64/bin:/usr/bin:/c/Users/intel/bin:/c/Program Files/Common Files/Oracle/Ja
+va/javapath:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem:/c/Windows/System32/WindowsPowerShell/v1.0:/c/Windows/System32/OpenSSH:/cmd:/c/Program Files
+/nodejs:/c/Program Files/MySQL/MySQL Shell 8.0/bin:/c/Users/intel/AppData/Local/Microsoft/WindowsApps:/c/Users/intel/AppData/Local/Programs/Microsoft VS Code/bi
+n:/c/Users/intel/AppData/Roaming/npm:/c/Users/intel/AppData/Local/Programs/cursor/resources/app/bin:/c/Users/intel/AppData/Local/Programs/DockerDesktop/resource
+s/bin:/usr/bin/vendor_perl:/usr/bin/core_perl)
+which: no pg_ctl in (/c/Users/intel/bin:/mingw64/bin:/usr/local/bin:/usr/bin:/bin:/mingw64/bin:/usr/bin:/c/Users/intel/bin:/c/Program Files/Common Files/Oracle/
+Java/javapath:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem:/c/Windows/System32/WindowsPowerShell/v1.0:/c/Windows/System32/OpenSSH:/cmd:/c/Program Fil
+es/nodejs:/c/Program Files/MySQL/MySQL Shell 8.0/bin:/c/Users/intel/AppData/Local/Microsoft/WindowsApps:/c/Users/intel/AppData/Local/Programs/Microsoft VS Code/
+bin:/c/Users/intel/AppData/Roaming/npm:/c/Users/intel/AppData/Local/Programs/cursor/resources/app/bin:/c/Users/intel/AppData/Local/Programs/DockerDesktop/resour
+ces/bin:/usr/bin/vendor_perl:/usr/bin/core_perl)
+/c/Users/intel/AppData/Local/Programs/DockerDesktop/resources/bin/docker
+---node_modules---
+500
+---sharp---
+sharp-ok
