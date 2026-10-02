@@ -9,6 +9,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js
 import { prisma } from '../lib/prisma.js';
 import { writeAudit } from './auditService.js';
 import { nextPublicId } from './idService.js';
+import { getJobQueue } from '../jobs/jobQueue.js';
 import { notify, notifyMany } from './notificationService.js';
 import { routeComplaint } from './routingService.js';
 import { applySla } from './slaService.js';
@@ -144,6 +145,17 @@ export type PresentedComplaint = Record<string, unknown> & {
   escalations?: unknown;
 };
 
+/**
+ * Coarse public bucket for a duplicate score. Citizens see high/medium/low per
+ * spec §13, never the exact score or the heuristics that produced it.
+ */
+export function similarityLabel(score: number | null | undefined): 'HIGH' | 'MEDIUM' | 'LOW' {
+  if (typeof score !== 'number') return 'LOW';
+  if (score >= 0.75) return 'HIGH';
+  if (score >= 0.45) return 'MEDIUM';
+  return 'LOW';
+}
+
 export function presentComplaint<T extends object>(actor: Actor, complaint: T): PresentedComplaint {
   const src = complaint as unknown as LoadedComplaint;
   const view: PresentedComplaint = { ...(complaint as Record<string, unknown>) };
@@ -171,9 +183,10 @@ export function presentComplaint<T extends object>(actor: Actor, complaint: T): 
   if (Array.isArray(src.duplicateCandidates)) {
     view.duplicateCandidates = src.duplicateCandidates.map((candidate) => {
       const safe = { ...candidate };
+      const similarity = similarityLabel(candidate.score as number | undefined);
       delete safe.score;
       delete safe.reasons;
-      return safe;
+      return { ...safe, similarity };
     });
   }
 
@@ -317,25 +330,62 @@ export async function createComplaint(
     metadata: { publicId, routing: routing.kind, mappingId: routing.kind === 'mapped' ? routing.mappingId : undefined },
   });
 
+  // Side effects leave the request path: notification fan-out and duplicate
+  // analysis are slow and must not block the citizen's response.
+  const queue = getJobQueue();
+  if (queue) {
+    await queue.enqueue('complaint.created', {
+      complaintId: complaint.id,
+      actorId: actor.id,
+      publicId,
+      routing: routing.kind,
+      departmentId: routing.kind === 'mapped' ? routing.departmentId : undefined,
+      jurisdictionId: routing.kind === 'mapped' ? routing.jurisdictionId : undefined,
+    });
+  } else {
+    await runComplaintCreatedSideEffects({
+      complaintId: complaint.id,
+      actorId: actor.id,
+      publicId,
+      routing: routing.kind,
+      departmentId: routing.kind === 'mapped' ? routing.departmentId : undefined,
+      jurisdictionId: routing.kind === 'mapped' ? routing.jurisdictionId : undefined,
+    });
+  }
+
+  return loadAuthorizedComplaint(actor, complaint.id);
+}
+
+export interface ComplaintCreatedJob {
+  complaintId: string;
+  actorId: string;
+  publicId: string;
+  routing: 'mapped' | 'unmapped';
+  departmentId?: string;
+  jurisdictionId?: string;
+}
+
+/** Notification fan-out plus duplicate analysis. Runs on the queue or inline. */
+export async function runComplaintCreatedSideEffects(job: ComplaintCreatedJob): Promise<void> {
   await notify({
-    userId: actor.id,
-    complaintId: complaint.id,
+    userId: job.actorId,
+    complaintId: job.complaintId,
     type: 'COMPLAINT_RECEIVED',
-    title: `Complaint ${publicId} received`,
+    title: `Complaint ${job.publicId} received`,
     body:
-      routing.kind === 'mapped'
+      job.routing === 'mapped'
         ? 'Your complaint was routed to the configured department.'
         : 'Your complaint was received, but the responsible authority has not yet been configured.',
   });
 
-  if (routing.kind === 'unmapped') {
+  if (job.routing === 'unmapped') {
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN', status: 'ACTIVE' } });
     await notifyMany(
       admins.map((a) => a.id),
       {
-        complaintId: complaint.id,
+        complaintId: job.complaintId,
         type: 'ROUTING_PENDING',
-        title: `Routing pending for ${publicId}`,
+        title: `Routing pending for ${job.publicId}`,
         body: 'No active responsibility mapping exists for this area and category.',
       },
     );
@@ -343,23 +393,25 @@ export async function createComplaint(
     const officers = await prisma.officerProfile.findMany({
       where: {
         isActive: true,
-        departmentId: routing.departmentId,
-        jurisdictionId: routing.jurisdictionId,
+        departmentId: job.departmentId,
+        jurisdictionId: job.jurisdictionId,
       },
     });
     await notifyMany(
       officers.map((o) => o.userId),
       {
-        complaintId: complaint.id,
+        complaintId: job.complaintId,
         type: 'COMPLAINT_RECEIVED',
-        title: `New complaint ${publicId}`,
+        title: `New complaint ${job.publicId}`,
         body: 'A new complaint entered the department queue.',
       },
     );
   }
 
-  await findDuplicates(actor, complaint.id);
-  return loadAuthorizedComplaint(actor, complaint.id);
+  await findDuplicates(
+    { id: job.actorId, role: 'CITIZEN', email: '' },
+    job.complaintId,
+  );
 }
 
 export async function findDuplicates(actor: Actor, complaintId: string) {
@@ -517,7 +569,10 @@ export async function transitionStatus(
   const effect = resolveAssignmentEffect(to, complaint.status, actor.role);
   if (effect) {
     await prisma.complaintAssignment.updateMany({
-      where: { complaintId: complaint.id, status: 'PENDING' },
+      // Rows still in play are PENDING or ACCEPTED. By RESOLVED time ACCEPTED has
+      // already moved the row off PENDING, so a PENDING-only filter would match
+      // nothing and silently drop the COMPLETED stamp.
+      where: { complaintId: complaint.id, status: { in: ['PENDING', 'ACCEPTED'] } },
       data: effect,
     });
   }
@@ -557,9 +612,14 @@ export async function assignComplaint(
   if (!canRoleTransition(actor.role, complaint.status, 'ASSIGNED')) {
     throw new ValidationError(`Cannot assign from status ${complaint.status}`);
   }
+  if (input.teamId) {
+    const team = await prisma.fieldTeam.findFirst({ where: { id: input.teamId, deletedAt: null } });
+    if (!team) throw new ValidationError(`Unknown field team: ${input.teamId}`);
+  }
 
   await prisma.complaintAssignment.updateMany({
-    where: { complaintId: complaint.id, status: 'PENDING' },
+    // Sweep every row still in play, including one a team already ACCEPTED.
+    where: { complaintId: complaint.id, status: { in: ['PENDING', 'ACCEPTED'] } },
     data: { status: 'REASSIGNED' },
   });
 

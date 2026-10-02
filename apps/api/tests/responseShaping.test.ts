@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { presentComplaint, type LoadedComplaint, type PresentedComplaint } from '../src/services/complaintService.js';
+import {
+  presentComplaint,
+  similarityLabel,
+  type LoadedComplaint,
+  type PresentedComplaint,
+} from '../src/services/complaintService.js';
 
 const actor = { id: 'u1', role: 'CITIZEN', email: 'citizen@example.test' } as const;
 
@@ -64,6 +69,22 @@ function fixture(): LoadedComplaint {
   } as unknown as LoadedComplaint;
 }
 
+describe('similarityLabel', () => {
+  it('buckets scores into coarse public bands', () => {
+    expect(similarityLabel(0.82)).toBe('HIGH');
+    expect(similarityLabel(0.75)).toBe('HIGH');
+    expect(similarityLabel(0.5)).toBe('MEDIUM');
+    expect(similarityLabel(0.45)).toBe('MEDIUM');
+    expect(similarityLabel(0.1)).toBe('LOW');
+  });
+
+  it('treats a missing score as LOW instead of throwing', () => {
+    // This is the exact shape that crashed the detail page with toFixed.
+    expect(similarityLabel(undefined)).toBe('LOW');
+    expect(similarityLabel(null)).toBe('LOW');
+  });
+});
+
 describe('complaint response shaping', () => {
   it('hides internal data from the reporting citizen', () => {
     const view = presentComplaint(actor, fixture()) as ShapedView;
@@ -76,6 +97,7 @@ describe('complaint response shaping', () => {
     expect(view.assignments[0]).not.toHaveProperty('assignedById');
     expect(view.duplicateCandidates[0]).not.toHaveProperty('score');
     expect(view.duplicateCandidates[0]).not.toHaveProperty('reasons');
+    expect(view.duplicateCandidates[0].similarity).toBe('HIGH');
   });
 
   it('keeps internal data for officers', () => {
@@ -88,6 +110,7 @@ describe('complaint response shaping', () => {
     expect(view.aiAnalyses[0]).toHaveProperty('rawOutput');
     expect(view.assignments[0]).toHaveProperty('note');
     expect(view.duplicateCandidates[0]).toHaveProperty('score');
+    expect(view.duplicateCandidates[0]).not.toHaveProperty('similarity');
   });
 
   it('drops the citizen entirely for field workers', () => {

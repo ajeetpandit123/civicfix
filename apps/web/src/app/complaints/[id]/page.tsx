@@ -28,7 +28,7 @@ type Complaint = {
   comments: Array<{ id: string; body: string; createdAt: string; author: { name: string } }>;
   media: Array<{ id: string; kind: string }>;
   aiAnalyses: Array<{ summary?: string | null; severity?: string | null; categoryCode?: string | null; confidence?: number | null }>;
-  duplicateCandidates: Array<{ score: number; match: { publicId: string; title: string } }>;
+  duplicateCandidates: Array<{ similarity: string; match: { publicId: string; title: string } }>;
 };
 
 export default function ComplaintDetailPage() {
@@ -123,7 +123,7 @@ export default function ComplaintDetailPage() {
               <ul className="mt-2 list-disc pl-5">
                 {c.duplicateCandidates.map((d) => (
                   <li key={d.match.publicId}>
-                    {d.match.publicId} — {d.match.title} (score {d.score.toFixed(2)})
+                    {d.match.publicId} — {d.match.title} (similarity: {d.similarity})
                   </li>
                 ))}
               </ul>

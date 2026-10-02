@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { homeForRole, useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 
@@ -10,11 +11,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  // Redirecting during render calls setState on Router while AppShell renders.
+  useEffect(() => {
+    if (!loading && !user) router.replace('/login');
+  }, [loading, user, router]);
+
   if (loading) {
     return <div className="p-8 text-sm text-slate-600">Loading session…</div>;
   }
   if (!user) {
-    router.replace('/login');
     return null;
   }
 
