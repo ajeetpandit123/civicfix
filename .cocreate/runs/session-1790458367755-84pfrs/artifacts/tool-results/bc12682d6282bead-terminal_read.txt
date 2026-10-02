@@ -1,9 +1,0 @@
-$ npm run lint
-
-> civicfix@0.1.0 lint
-> npm run lint --workspaces --if-present
-
-
-> @civicfix/api@0.1.0 lint
-> eslint src --ext .ts
-[job vt-1790797373670-54 STILL RUNNING (180s): npm run lint - its completion result arrives automatically. Do NOT read this terminal again for this job: END YOUR TURN now and you will be woken when it finishes.]

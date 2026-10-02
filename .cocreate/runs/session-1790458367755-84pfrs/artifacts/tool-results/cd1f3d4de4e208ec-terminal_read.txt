@@ -1,2 +1,0 @@
-$ npm run build
-[job never started: its command did not reach the terminal's shell]

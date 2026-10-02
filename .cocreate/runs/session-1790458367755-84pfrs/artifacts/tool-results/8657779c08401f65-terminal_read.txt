@@ -1,4 +1,0 @@
-$ mkdir -p apps/api/prisma/migrations/0001_init && npx prisma migrate diff --from-empty --to-schema-datamodel apps/api/prisma/schema.prisma --script > apps/api/prisma/migrations/0001_init/migration.sql && printf 'provider = "postgresql"\n' > apps/api/prisma/migrations/migration_lock.toml && wc -l apps/api/prisma/migrations/0001_init/migration.sql
-prisma/migrations/0001_init/migration.sql && printf 'provider = "postgresql"\n' > apps/api/prisma/migrations/migration_lock.toml && wc -l apps/api/prisma/migrat
-ions/0001_init/migration.sql
-[job vt-1790797319466-45 STILL RUNNING (44s): mkdir -p apps/api/prisma/migrations/0001_init && npx prisma migrate diff --from- - its completion result arrives automatically. Do NOT read this terminal again for this job: END YOUR TURN now and you will be woken when it finishes.]

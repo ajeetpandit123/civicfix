@@ -1,2 +1,0 @@
-NO_REAL_SECRETS
-[exit code 0]

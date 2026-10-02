@@ -1,2 +1,0 @@
-MIGRATION_OK
-[exit code 0]

@@ -1,3 +1,0 @@
-$ test -s apps/api/prisma/migrations/0001_init/migration.sql && echo MIGRATION_OK && npx prisma validate
-
-[job vt-1790797504619-77 STILL RUNNING (36s): test -s apps/api/prisma/migrations/0001_init/migration.sql && echo MIGRATION_OK  - its completion result arrives automatically. Do NOT read this terminal again for this job: END YOUR TURN now and you will be woken when it finishes.]

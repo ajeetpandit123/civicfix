@@ -1,6 +1,0 @@
-Started in the background as job "vt-1790730118451-23" in terminal "main-84pfrs".
-
-> civicfix@0.1.0 db:generate
-> npm run prisma:generate --workspace=@civicfix/api
-(still running after 8s — moved to background as job vt-1790730118451-23 in terminal "main-84pfrs"; you'll get a tool result when it finishes)
-It's running in the Cana Agent terminal (separate from the user's). You are NOT blocked — you'll receive a terminal-job-done result automatically when it finishes. Do not poll in a loop; use TERMINAL_READ (or poll once) only if you need intermediate output.

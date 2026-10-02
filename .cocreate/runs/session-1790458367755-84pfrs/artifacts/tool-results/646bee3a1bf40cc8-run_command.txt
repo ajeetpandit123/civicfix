@@ -1,2 +1,0 @@
-SAFETY_OK
-[exit code 0]
