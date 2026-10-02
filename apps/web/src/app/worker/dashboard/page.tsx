@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Textarea } from '@/components/ui/field';
 import { useAuth } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
+import { hasEvidence, noteFor, setNoteFor, taskActions } from '@/lib/workerTasks';
 import { useState } from 'react';
 
 type Task = {
@@ -65,9 +66,10 @@ export default function WorkerDashboard() {
       <p className="text-sm text-slate-600">Only complaints assigned to your field team are listed.</p>
       <ul className="mt-4 space-y-4">
         {data?.items.map((c) => {
-          const note = notes[c.id] ?? '';
-          const hasAfter = (uploads[c.id] ?? []).includes('AFTER');
+          const note = noteFor(notes, c.id);
+          const hasAfter = hasEvidence(uploads[c.id], 'AFTER');
           const status = c.status;
+          const actions = taskActions(status, hasAfter);
 
           return (
             <li key={c.id} className="rounded-xl border border-slate-200 bg-white p-4">
@@ -85,37 +87,37 @@ export default function WorkerDashboard() {
               <Textarea
                 className="mt-3"
                 value={note}
-                onChange={(e) => setNotes((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                onChange={(e) => setNotes((prev) => setNoteFor(prev, c.id, e.target.value))}
                 placeholder="Update notes"
               />
 
               <div className="mt-3 flex flex-wrap gap-2">
-                {status === 'ASSIGNED' && (
-                  <>
-                    <Button onClick={() => act.mutate({ id: c.id, status: 'ACCEPTED', note })}>
-                      Accept
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => act.mutate({ id: c.id, status: 'UNDER_REVIEW', note })}
-                    >
-                      Decline
-                    </Button>
-                  </>
+                {actions.canAccept && (
+                  <Button onClick={() => act.mutate({ id: c.id, status: 'ACCEPTED', note })}>
+                    Accept
+                  </Button>
                 )}
-                {status === 'ACCEPTED' && (
+                {actions.canDecline && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => act.mutate({ id: c.id, status: 'UNDER_REVIEW', note })}
+                  >
+                    Decline
+                  </Button>
+                )}
+                {actions.canStart && (
                   <Button onClick={() => act.mutate({ id: c.id, status: 'IN_PROGRESS', note })}>
                     Start work
                   </Button>
                 )}
-                {status === 'ON_HOLD' && (
+                {actions.canResume && (
                   <Button onClick={() => act.mutate({ id: c.id, status: 'IN_PROGRESS', note })}>
                     Resume
                   </Button>
                 )}
                 {status === 'IN_PROGRESS' && (
                   <Button
-                    disabled={!hasAfter}
+                    disabled={!actions.canComplete}
                     onClick={() => act.mutate({ id: c.id, status: 'RESOLVED', note })}
                   >
                     Mark complete
@@ -148,7 +150,7 @@ export default function WorkerDashboard() {
                 </label>
               </div>
 
-              {status === 'IN_PROGRESS' && !hasAfter && (
+              {actions.showCompletionHint && (
                 <p className="mt-2 text-xs text-slate-500">
                   Upload an after photo to mark this task complete.
                 </p>

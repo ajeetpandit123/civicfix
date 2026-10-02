@@ -8,6 +8,7 @@ const enabled = Boolean(process.env.DATABASE_URL) && process.env.RUN_API_INTEGRA
 
 describe.skipIf(!enabled)('auth + complaint integration', () => {
   const env = loadEnv();
+  env.AI_PROVIDER = 'mock';
   const app = createApp(env);
 
   afterAll(async () => {

@@ -46,8 +46,10 @@ export const statusChangeSchema = z.object({
 });
 
 export const assignSchema = z.object({
-  officerId: z.string().cuid().optional(),
-  teamId: z.string().cuid().optional(),
+  // Reference ids, not formats: the foreign key is the real integrity check, and
+  // seeded ids are human-readable rather than CUIDs.
+  officerId: z.string().min(1).optional(),
+  teamId: z.string().min(1).optional(),
   note: z.string().trim().max(2000).optional(),
 });
 

@@ -16,6 +16,9 @@ async function login(app: ReturnType<typeof createApp>, email: string) {
 
 describe.skipIf(!enabled)('complaint lifecycle integration', () => {
   const env = loadEnv();
+  // Pin classification to the in-process mock so this suite measures our workflow
+  // rather than a third-party model's latency or quota.
+  env.AI_PROVIDER = 'mock';
   const app = createApp(env);
 
   afterAll(async () => {
@@ -33,8 +36,8 @@ describe.skipIf(!enabled)('complaint lifecycle integration', () => {
       .send({
         title: 'Garbage has not been collected for the last 5 days',
         description: 'Garbage has not been collected for the last 5 days.',
-        latitude: 28.7,
-        longitude: 77.1,
+        latitude: 28.7196,
+        longitude: 77.175,
         address: 'Adarsh Nagar, Delhi, near Domino\'s',
         priority: 'HIGH',
       });
@@ -44,8 +47,8 @@ describe.skipIf(!enabled)('complaint lifecycle integration', () => {
     const assigned = await request(app)
       .post(`/api/complaints/${id}/assign`)
       .set('Authorization', `Bearer ${officerToken}`)
-      .send({ teamId: 'demo-team-1', note: 'Please clear the pile' });
-    expect(assigned.status).toBe(200);
+      .send({ teamId: 'seed-sanitation-team', note: 'Please clear the pile' });
+    expect(assigned.status, JSON.stringify(assigned.body)).toBe(200);
 
     for (const status of ['ACCEPTED', 'IN_PROGRESS'] as const) {
       const step = await request(app)
@@ -59,7 +62,7 @@ describe.skipIf(!enabled)('complaint lifecycle integration', () => {
       .post(`/api/complaints/${id}/status`)
       .set('Authorization', `Bearer ${workerToken}`)
       .send({ status: 'RESOLVED', note: 'Cleared and swept' });
-    expect(resolved.status).toBe(200);
+    expect(resolved.status, JSON.stringify(resolved.body)).toBe(200);
 
     // The assignment trail must move with the status trail.
     const assignment = await prisma.complaintAssignment.findFirst({
@@ -81,25 +84,40 @@ describe.skipIf(!enabled)('complaint lifecycle integration', () => {
   it('reopens when the citizen says the problem persists', async () => {
     const citizenToken = await login(app, 'citizen@civicfix.demo');
     const officerToken = await login(app, 'officer@civicfix.demo');
+    const workerToken = await login(app, 'worker@civicfix.demo');
 
     const created = await request(app)
       .post('/api/complaints')
       .set('Authorization', `Bearer ${citizenToken}`)
       .send({
-        title: 'Pothole outside the market gate',
-        description: 'Deep pothole, cars swerving into the footpath.',
-        latitude: 28.71,
-        longitude: 77.11,
-        address: 'Adarsh Nagar, Delhi, near the market gate',
+        title: 'Garbage pile behind the community hall',
+        description: 'Garbage has been rotting behind the hall for a week.',
+        latitude: 28.72,
+        longitude: 77.18,
+        address: 'Adarsh Nagar, Delhi, behind the community hall',
       });
     expect(created.status).toBe(201);
     const id = created.body.complaint.id as string;
 
-    const resolved = await request(app)
-      .post(`/api/complaints/${id}/resolve`)
+    const assigned2 = await request(app)
+      .post(`/api/complaints/${id}/assign`)
       .set('Authorization', `Bearer ${officerToken}`)
-      .send({ note: 'Patch laid' });
-    expect(resolved.status).toBe(200);
+      .send({ teamId: 'seed-sanitation-team' });
+    expect(assigned2.status, JSON.stringify(assigned2.body)).toBe(200);
+
+    for (const status of ['ACCEPTED', 'IN_PROGRESS'] as const) {
+      const step = await request(app)
+        .post(`/api/complaints/${id}/status`)
+        .set('Authorization', `Bearer ${workerToken}`)
+        .send({ status, note: `moved to ${status}` });
+      expect(step.status, JSON.stringify(step.body)).toBe(200);
+    }
+
+    const resolved = await request(app)
+      .post(`/api/complaints/${id}/status`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .send({ status: 'RESOLVED', note: 'Patch laid' });
+    expect(resolved.status, JSON.stringify(resolved.body)).toBe(200);
 
     const verify = await request(app)
       .post(`/api/complaints/${id}/verify`)
@@ -125,8 +143,8 @@ describe.skipIf(!enabled)('complaint lifecycle integration', () => {
       .send({
         title: 'Streetlight out near the park',
         description: 'The lamp has been dark for a week.',
-        latitude: 28.72,
-        longitude: 77.12,
+        latitude: 28.73,
+        longitude: 77.19,
         address: 'Adarsh Nagar, Delhi, near the park',
       });
     expect(created.status).toBe(201);
@@ -147,5 +165,28 @@ describe.skipIf(!enabled)('complaint lifecycle integration', () => {
       expect(assignment).not.toHaveProperty('note');
       expect(assignment).not.toHaveProperty('assignedById');
     }
+  });
+
+  it('enters ROUTING_PENDING instead of inventing an authority', async () => {
+    const citizenToken = await login(app, 'citizen@civicfix.demo');
+
+    const created = await request(app)
+      .post('/api/complaints')
+      .set('Authorization', `Bearer ${citizenToken}`)
+      .send({
+        title: 'Broken bench in the park',
+        description: 'The park bench has splintered and is unsafe to sit on.',
+        latitude: 28.73,
+        longitude: 77.19,
+        address: 'Adarsh Nagar, Delhi, near the park',
+      });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+
+    // Spec §9: with no responsibility mapping we must not name anyone responsible.
+    const complaint = created.body.complaint;
+    expect(complaint.status).toBe('ROUTING_PENDING');
+    expect(complaint.departmentId ?? null).toBeNull();
+    expect(complaint.assignedOfficer ?? null).toBeNull();
+    expect(complaint.assignments ?? []).toHaveLength(0);
   });
 });

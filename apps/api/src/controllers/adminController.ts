@@ -36,8 +36,8 @@ const mappingSchema = z.object({
   areaId: z.string().cuid(),
   categoryId: z.string().cuid(),
   departmentId: z.string().cuid(),
-  defaultOfficerId: z.string().cuid().optional(),
-  defaultTeamId: z.string().cuid().optional(),
+  defaultOfficerId: z.string().min(1).optional(),
+  defaultTeamId: z.string().min(1).optional(),
   isActive: z.boolean().optional(),
 });
 
