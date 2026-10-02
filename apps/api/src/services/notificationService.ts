@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import type { NotificationType } from '@prisma/client';
-import { logger } from '../lib/logger.js';
 import type { Env } from '../config/env.js';
+import { createMailer } from './emailService.js';
 
 export async function notify(input: {
   userId: string;
@@ -22,9 +22,12 @@ export async function notifyMany(
 }
 
 export async function deliverEmail(env: Env, to: string, subject: string, text: string): Promise<void> {
-  if (env.EMAIL_DRIVER === 'console') {
-    logger.info({ to, subject }, 'email_console');
-    return;
-  }
-  logger.info({ to, subject, textLength: text.length }, 'email_smtp_not_fully_configured');
+  const mailer = createMailer({
+    driver: env.EMAIL_DRIVER,
+    from: env.SMTP_FROM,
+    smtp: env.SMTP_HOST
+      ? { host: env.SMTP_HOST, port: env.SMTP_PORT ?? 587, user: env.SMTP_USER, pass: env.SMTP_PASS }
+      : undefined,
+  });
+  await mailer.send({ to, subject, text });
 }

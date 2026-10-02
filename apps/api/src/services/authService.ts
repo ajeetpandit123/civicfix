@@ -4,6 +4,8 @@ import type { Role, User, UserStatus } from '@prisma/client';
 import type { Env } from '../config/env.js';
 import { hashToken, randomToken } from '../lib/crypto.js';
 import { AppError, ConflictError, UnauthorizedError } from '../lib/errors.js';
+import { emailVerificationUrl, passwordResetMail, passwordResetUrl, verificationMail } from './emailService.js';
+import { deliverEmail } from './notificationService.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -53,7 +55,7 @@ export async function verifyAccessToken(env: Env, token: string): Promise<Access
   };
 }
 
-export async function registerUser(input: {
+export async function registerUser(env: Env, input: {
   email: string;
   password: string;
   name: string;
@@ -82,6 +84,10 @@ export async function registerUser(input: {
       expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
     },
   });
+
+  // The token exists in plaintext only here; the row above stores just its hash.
+  const mail = verificationMail(user.email, emailVerificationUrl(env.API_PUBLIC_URL, verifyToken));
+  await deliverEmail(env, mail.to, mail.subject, mail.text);
   return user;
 }
 
@@ -182,7 +188,7 @@ export async function verifyEmail(token: string): Promise<void> {
   ]);
 }
 
-export async function requestPasswordReset(email: string): Promise<void> {
+export async function requestPasswordReset(env: Env, email: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   if (!user || user.deletedAt) return;
   const token = randomToken();
@@ -194,6 +200,10 @@ export async function requestPasswordReset(email: string): Promise<void> {
     },
   });
   logger.info({ to: user.email }, 'password_reset_issued');
+
+  // Only the hash is persisted, so the link must leave the process right now.
+  const mail = passwordResetMail(user.email, passwordResetUrl(env.API_PUBLIC_URL, token));
+  await deliverEmail(env, mail.to, mail.subject, mail.text);
 }
 
 export async function resetPassword(token: string, password: string): Promise<void> {

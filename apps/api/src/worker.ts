@@ -1,15 +1,20 @@
+import { loadDotEnv } from './config/dotenv.js';
 import { loadEnv } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { runSlaSweep } from './jobs/slaSweep.js';
+import { bootstrapJobQueue } from './jobs/handlers.js';
 
+loadDotEnv();
 loadEnv();
-logger.info('worker_start');
+
+const queue = bootstrapJobQueue();
 
 async function loop() {
+  await queue.drain();
   await runSlaSweep();
 }
 
-await loop();
+loop().catch((err) => logger.error({ err }, 'worker_start_failed'));
 setInterval(() => {
-  loop().catch((err) => logger.error({ err }, 'worker_tick_failed'));
-}, 60_000);
+  loop().catch((err) => logger.error({ err }, 'worker_loop_failed'));
+}, 60_000).unref();

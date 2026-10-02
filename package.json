@@ -25,10 +25,14 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "nodemailer": "^10.0.13"
   }
 }

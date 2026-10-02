@@ -37,10 +37,32 @@ const envSchema = z.object({
     .transform((v) => v === 'true'),
 });
 
+/**
+ * Tolerates the value shapes a hand-edited .env actually produces: an accidental
+ * doubled key (`REDIS_URL=REDIS_URL="x"`) and literal quote wrappers. Keeps the
+ * original value when neither applies.
+ */
+export function normalizeEnvValue(key: string, value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  let v = value.trim();
+  const doubled = `${key}=`;
+  while (v.startsWith(doubled)) v = v.slice(doubled.length).trim();
+  const first = v[0];
+  const last = v[v.length - 1];
+  if (v.length >= 2 && (first === '"' || first === "'") && last === first) {
+    v = v.slice(1, -1);
+  }
+  return v;
+}
+
 export type Env = z.infer<typeof envSchema>;
 
 export function loadEnv(raw: NodeJS.ProcessEnv = process.env): Env {
-  const parsed = envSchema.safeParse(raw);
+  const normalized: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(raw)) {
+    normalized[key] = normalizeEnvValue(key, value);
+  }
+  const parsed = envSchema.safeParse(normalized);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Invalid environment: ${issues}`);

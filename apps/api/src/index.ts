@@ -1,8 +1,10 @@
+import { loadDotEnv } from './config/dotenv.js';
 import { createApp } from './app.js';
 import { loadEnv } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { runSlaSweep } from './jobs/slaSweep.js';
 
+loadDotEnv();
 const env = loadEnv();
 const app = createApp(env);
 

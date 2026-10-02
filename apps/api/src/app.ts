@@ -1,4 +1,5 @@
 import cookieParser from 'cookie-parser';
+import { logger } from './lib/logger.js';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
@@ -45,8 +46,13 @@ export function createApp(env: Env) {
     res.json({ status: 'ok' });
   });
   app.get('/ready', async (_req, res) => {
-    await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: 'ready' });
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      res.json({ status: 'ready', database: 'connected', provider: 'postgresql' });
+    } catch (err) {
+      logger.error({ err }, 'readiness_probe_failed');
+      res.status(503).json({ status: 'not_ready', database: 'disconnected' });
+    }
   });
 
   app.use('/api/auth', authRouter(env));

@@ -31,7 +31,7 @@ export function authController(env: Env) {
   return {
     register: async (req: Request, res: Response) => {
       const body = parseJson(registerSchema, req.body);
-      const user = await registerUser(body);
+      const user = await registerUser(env, body);
       res.status(201).json({
         user: publicUser(user),
         message: 'Account created. In this demo environment an admin may activate accounts, or use seeded demo users.',
@@ -76,7 +76,7 @@ export function authController(env: Env) {
     },
     forgotPassword: async (req: Request, res: Response) => {
       const body = parseJson(z.object({ email: emailSchema }), req.body);
-      await requestPasswordReset(body.email);
+      await requestPasswordReset(env, body.email);
       res.json({ ok: true });
     },
     resetPassword: async (req: Request, res: Response) => {
