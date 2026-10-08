@@ -25,6 +25,19 @@ const req = { id: 'req-1' } as unknown as Req;
 const next = (() => {}) as Next;
 
 describe('errorHandler', () => {
+  it('answers 503 when the database is unreachable (P1001 as PrismaClientKnownRequestError)', () => {
+    // Seen live in apps/api logs: P1001 can arrive with THIS name + code.
+    const err = Object.assign(new Error("Can't reach database server at `localhost:5432`"), {
+      name: 'PrismaClientKnownRequestError',
+      code: 'P1001',
+    });
+    const { res, captured } = mockRes();
+    errorHandler(err, req, res, next);
+    expect(captured.status).toBe(503);
+    expect(captured.body).toMatchObject({
+      error: { code: 'SERVICE_UNAVAILABLE', message: expect.stringContaining('database is unreachable') },
+    });
+  });
   it('answers 503 with a clear message when the database is unreachable', () => {
     // Prisma raises P1001 ("Can't reach database server") with this name.
     const err = Object.assign(new Error("Can't reach database server at `localhost:5432`"), {
