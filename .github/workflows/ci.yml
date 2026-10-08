@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    name: Lint, typecheck, tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run lint
+      - run: npm run typecheck
+      # Unit suites only: the API integration suites are gated behind
+      # RUN_API_INTEGRATION=1 and run in the `integration` job below.
+      - run: npm test
+      - run: npm run build
+
+  integration:
+    name: API integration tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: civicfix
+          POSTGRES_PASSWORD: civicfix
+          POSTGRES_DB: civicfix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U civicfix"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://civicfix:civicfix@localhost:5432/civicfix?schema=public
+      RUN_API_INTEGRATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Ephemeral throwaway secrets for this job only — never stored, never echoed.
+      - name: Generate ephemeral JWT secrets
+        run: |
+          echo "JWT_ACCESS_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "JWT_REFRESH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run db:generate
+      # Fresh throwaway database — the normal, non-destructive migration path.
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - run: npm test

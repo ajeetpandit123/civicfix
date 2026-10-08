@@ -1,0 +1,25 @@
+node_modules
+dist
+.next
+out
+coverage
+*.log
+.env
+.env.local
+.env.*.local
+uploads
+.pgdata
+tmp
+.DS_Store
+Thumbs.db
+prisma/*.db
+prisma/*.db-journal
+playwright-report
+test-results
+apps/web/.turbo
+*.tsbuildinfo
+.vscode
+.idea
+
+# Cana workspace artifacts (agent plans, local state)
+.cocreate/

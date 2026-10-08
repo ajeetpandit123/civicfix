@@ -1,0 +1,40 @@
+{
+  "name": "civicfix",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CivicFix — civic issue reporting and resolution platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@civicfix/api --workspace=@civicfix/web",
+    "dev:api": "npm run dev --workspace=@civicfix/api",
+    "dev:web": "npm run dev --workspace=@civicfix/web",
+    "dev:worker": "npm run worker --workspace=@civicfix/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspace=@civicfix/web",
+    "build": "npm run build --workspaces --if-present",
+    "db:generate": "npm run prisma:generate --workspace=@civicfix/api",
+    "db:migrate": "npm run prisma:migrate --workspace=@civicfix/api",
+    "db:seed": "npm run prisma:seed --workspace=@civicfix/api",
+    "db:reset": "npm run prisma:reset --workspace=@civicfix/api",
+    "db:dev:up": "node scripts/dev-postgres.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
+    "embedded-postgres": "^16.14.0-beta.17",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "nodemailer": "^10.0.13"
+  }
+}
