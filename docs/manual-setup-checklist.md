@@ -1,12 +1,11 @@
 # Manual setup checklist — CivicFix
 
-Everything below is work a human has to do. The repo runs on demo values and on
-integrations that are implemented but stay in their local modes until you supply
-credentials.
+Everything below is work a human has to do. The repo runs, but it runs on demo
+values and on integrations that silently do nothing.
 
-The short version: **storage, email and the job queue are all implemented** —
-`STORAGE_DRIVER=s3`, `EMAIL_DRIVER=smtp` and `REDIS_URL` all change behaviour once
-you provide the credentials below. Local development needs none of them.
+The short version: **three of the four "integrations" in `.env` are accepted by the
+config parser and then ignored.** Setting `STORAGE_DRIVER=s3`, `EMAIL_DRIVER=smtp`
+or `REDIS_URL` changes nothing in behaviour. Those are code gaps, not setup gaps.
 
 ---
 
@@ -23,24 +22,21 @@ That brings up `postgres:16-alpine` with user/password/db all `civicfix`
 
 ```bash
 npm run db:generate     # regenerate the Prisma client
-npm run db:migrate      # apply the baseline migration (apps/api/prisma/migrations/0001_init)
+npm run prisma:migrate  # apply the baseline migration (apps/api/prisma/migrations/0001_init)
 npm run db:seed         # optional: load the demo data below
 ```
 
-No Docker? Either install PostgreSQL 16 yourself and point `DATABASE_URL` at it, or
-let the repo run one — `npm run db:dev:up` downloads a local PostgreSQL 16 with the
-same user/password/database as docker-compose.yml (`scripts/dev-postgres.mjs`).
+No Docker? Install PostgreSQL yourself and point `DATABASE_URL` at it.
 
-`redis` in `docker-compose.yml:18-21` is optional — without `REDIS_URL` the job
-queue uses its in-process store (see §3c).
+`redis` in `docker-compose.yml:18-21` is currently decorative — see §3.
 
 ---
 
 ## 2. Secrets you must generate (blocking)
 
 `apps/api/src/config/env.ts:9-11` makes these three mandatory, with a 32-character
-minimum on the two secrets. This checkout already has a local `.env` with freshly
-generated values; generate your own if it is missing, and never reuse or share them.
+minimum on the two secrets. Right now `.env` is a copy of `.env.example`, so it
+contains the literal placeholder `change-me-access-secret-min-32-chars`.
 
 ```bash
 # Git Bash — generate two independent values
@@ -55,55 +51,66 @@ Everything else in `env.ts` has a default and boots without you setting it.
 
 ---
 
-## 3. Integrations — what is implemented and what each mode does
+## 3. CODE WORK — configuration alone will not fix these
 
-All four are implemented in code. Nothing here is a stub; the local modes are real
-behaviour, not placeholders.
+This is the section that matters most. Four things look configurable and are not.
 
-### 3a. Object storage
-`apps/api/src/storage/objectStorage.ts` branches on `env.STORAGE_DRIVER`: `local`
-(the default) stores under `STORAGE_LOCAL_DIR` with random names and no
-caller-chosen path; `s3` selects `apps/api/src/storage/s3.ts`, which signs requests
-with hand-rolled AWS SigV4 (works against S3, MinIO and R2 via `S3_ENDPOINT`).
+### 3a. S3 storage is not implemented
+`apps/api/src/storage/objectStorage.ts:30-32`:
 
-Set `STORAGE_DRIVER=s3` plus `S3_BUCKET` (with `S3_REGION`, `S3_ACCESS_KEY_ID`,
-`S3_SECRET_ACCESS_KEY`, and optionally `S3_ENDPOINT`) to move uploads off local
-disk — required for production or any multi-instance deployment. The SigV4
-implementation is pinned to the official AWS example vector in
-`apps/api/tests/objectStorage.test.ts`.
+```ts
+export function createStorage(env: Env): ObjectStorage {
+  return new LocalStorage(env.STORAGE_LOCAL_DIR);
+}
+```
 
-### 3b. Email — including password reset
-`apps/api/src/services/emailService.ts` has two real drivers: `console` (the
-development default — prints the rendered message to the API log with only the host
-redacted, so the token stays readable) and `smtp` (nodemailer over `SMTP_*`).
-`requestPasswordReset` sends through `deliverEmail`, and registration sends the
-verification mail the same way.
+The return value does not depend on `env.STORAGE_DRIVER` at all. The `S3_*` fields
+(`env.ts:17-21`) are parsed and then never read by any file.
 
-Reset and verification links are built from `WEB_ORIGIN` (the WEB app, never the
-API) at `/reset-password` and `/verify-email`; both pages exist in
-`apps/web/src/app/` and post to `POST /api/auth/reset-password` and
-`POST /api/auth/verify-email`. The token is stored only as a hash
-(`hashToken(token)`) — the plaintext exists exactly once, at send time.
+Consequence: uploads land on local disk under `./uploads`. That is fine for one
+dev box and wrong for production or for anything multi-instance.
 
-For production set `EMAIL_DRIVER=smtp` with `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
-`SMTP_PASS` and a real `SMTP_FROM`.
+To fix properly: implement an `S3Storage implements ObjectStorage` with `put`/`get`
+against `@aws-sdk/client-s3`, and branch on `env.STORAGE_DRIVER` in `createStorage`.
+Until that exists, do not set `STORAGE_DRIVER=s3` expecting it to work.
 
-### 3c. Job queue
-`apps/api/src/jobs/jobQueue.ts` implements a queue with retries and backoff, with
-two stores: an in-process one (the default — no Redis needed) and a Redis-backed one
-used when `REDIS_URL` is set (via `ioredis`). Handlers cover email delivery, AI
-analysis and the SLA sweep (`apps/api/src/jobs/handlers.ts`, `slaSweep.ts`), and
-notification fan-out plus duplicate analysis run on the queue or inline
-(`complaintService.ts`, `runComplaintCreatedSideEffects`).
+### 3b. Email is not implemented — including password reset
+`apps/api/src/services/notificationService.ts:24-30` logs and returns. Both drivers.
 
-Run the dedicated worker with `npm run dev:worker` (it also runs the SLA sweep).
-Retries and backoff are covered by `apps/api/tests/jobQueue.test.ts`.
+Worse, `apps/api/src/services/authService.ts:185-197` (`requestPasswordReset`)
+writes a `passwordReset` row and logs `password_reset_issued`, but never calls
+`deliverEmail`. So `POST /api/auth/forgot-password` always answers `{ok: true}`
+and the reset link is written nowhere a user can reach it.
 
-### 3d. Map tiles
-`apps/web/src/components/LocationMap.tsx` tiles straight from
-`tile.openstreetmap.org`. The `MAPTILER_KEY` and `COOKIE_DOMAIN` lines that used to
-sit in `.env.example` were read by no code and have been removed — there is no
-MapTiler integration and no cookie-domain configuration to supply.
+Consequence: **the forgot-password flow cannot work at all today.** Anyone who
+registers normally and forgets their password is stuck until an admin intervenes.
+
+To fix properly: wire a real transport (nodemailer against `SMTP_*`) into
+`deliverEmail`, and have `requestPasswordReset` send
+`${API_PUBLIC_URL}/reset-password?token=...`. Note the token is stored only as a
+hash (`hashToken(token)`) — the plaintext exists exactly once, at send time.
+
+### 3c. There is no job queue
+`REDIS_URL` (`env.ts:14`) is referenced nowhere in `apps/api/src`. `ioredis` is a
+declared dependency (`apps/api/package.json:32`) that is never imported — it is
+dead weight. `apps/api/src/worker.ts:8-16` is a `setInterval` firing `runSlaSweep()`
+once a minute.
+
+Consequences: the worker must be a separate long-lived process (`npm run worker`),
+it does nothing but SLA sweeping, and AI classification plus duplicate detection
+run inline in the HTTP request for `POST /api/complaints`. There is no retry and no
+visibility into failures.
+
+To fix properly: introduce a queue (BullMQ over that Redis, or a Postgres-backed
+jobs table if you want one less moving part) and move notification fan-out, AI
+classification and duplicate analysis onto it. If you skip this, remove `ioredis`
+from `package.json` rather than shipping an unused dependency.
+
+### 3d. `MAPTILER_KEY` and `COOKIE_DOMAIN` do not exist
+They are in `.env.example:46,50` and absent from `envSchema` (`env.ts:3-38`).
+`apps/web/src/components/LocationMap.tsx:41` tiles straight from
+`tile.openstreetmap.org`. Setting them is harmless and pointless. Either wire up
+MapTiler or delete the two lines from `.env.example` so the example stops lying.
 
 ---
 
@@ -136,8 +143,7 @@ GEOCODER_USER_AGENT=CivicFix/0.1 (you@example.com)
 For production volume, swap to a paid geocoder — `createGeocoder`
 (`geocoder.ts:68-71`) is the one seam to replace.
 
-**SMTP** — only needed once you set `EMAIL_DRIVER=smtp` (see §3b). Skip for
-development; `EMAIL_DRIVER=console` prints the mail to the API log.
+**SMTP** — credentials are useless until §3b is written. Skip for now.
 
 ---
 
@@ -197,6 +203,7 @@ findable.
 process risk — there is no history, no rollback and no isolation from mistakes.
 
 ```bash
+cd /c/civicfix
 git init
 git add .
 git commit -m "chore: initial CivicFix import"
@@ -204,28 +211,28 @@ git commit -m "chore: initial CivicFix import"
 
 Then create a private GitHub repo and push, so `.github/workflows/ci.yml` has
 something to run on. Before that first `git add`, scan what is being staged and
-confirm `.env` is not in it (it is gitignored; `uploads/`, `.pgdata` and build
-output are too).
+confirm `.env` is not in it.
 
-`.github/workflows/ci.yml` runs lint, typecheck, tests and build in one job, plus a
-second job that exports `RUN_API_INTEGRATION=1` and runs the integration suites
-against a throwaway Postgres service container after `db:migrate` + `db:seed` — so
-the full complaint lifecycle is exercised on every push, with no destructive reset.
+Related: `ci.yml:42-48` runs migrate, lint, typecheck, test and build against a
+Postgres service container, but never exports `RUN_API_INTEGRATION=1`, so the
+integration suites are skipped in CI as well as locally. Adding that line is how
+the full complaint lifecycle gets exercised on every push.
 
 ---
 
 ## 8. Verification you owe
 
-Run the local gates yourself and expect exit 0: `npm run lint`, `npm run typecheck`,
-`npm test`, `npm run build`. What still needs a database and a running stack:
+Local gates are green today: `npm run typecheck`, `npm run lint`, `npm test`,
+`npm run build`. What has **not** been proven on a machine like yours:
 
 - The end-to-end lifecycle (citizen → officer assign → worker accept/start/complete
   → citizen verify → closed). `apps/api/tests/integration.lifecycle.test.ts`
-  covers it but is gated behind `DATABASE_URL` **and** `RUN_API_INTEGRATION=1`:
+  covers it but is gated behind `DATABASE_URL` **and** `RUN_API_INTEGRATION=1`, and
+  it has never executed:
 
   ```bash
-  docker compose up -d postgres   # or: npm run db:dev:up
-  npm run db:migrate
+  docker compose up -d postgres
+  npm run prisma:migrate
   npm run db:seed
   RUN_API_INTEGRATION=1 npm test
   ```
@@ -246,7 +253,6 @@ The manual walkthrough worth doing once the stack is up is written out at
 4. `RUN_API_INTEGRATION=1 npm test` to actually exercise the lifecycle (§8)
 5. Real responsibility mappings, replacing the fictional ones (§5) — this is the
    record that decides who is accountable for a complaint
-6. SMTP credentials for the password-reset email (§3b) — the flow works, but
-   `EMAIL_DRIVER=console` only prints the link to the API log
-7. S3 credentials (§3a) and `REDIS_URL` (§3c) before real load
+6. Password-reset email (§3b) — otherwise forgetful users are permanently stuck
+7. S3 storage (§3a) and the job queue (§3c) before real load
 8. AI key and geocoder User-Agent (§4) — lowest risk, do last

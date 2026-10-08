@@ -14,9 +14,6 @@ export function authRouter(env: Env): Router {
     legacyHeaders: false,
   });
   r.post('/register', limiter, asyncHandler(c.register));
-  // Requests an officer / field-worker account: created PENDING_VERIFICATION,
-  // no permissions until an admin approves it (role is never trusted here).
-  r.post('/register-staff', limiter, asyncHandler(c.registerStaff));
   r.post('/login', limiter, asyncHandler(c.login));
   r.post('/refresh', asyncHandler(c.refresh));
   r.post('/logout', asyncHandler(c.logout));

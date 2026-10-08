@@ -112,8 +112,6 @@ model User {
   statusChanges           ComplaintStatusHistory[]
   assignmentsMade         ComplaintAssignment[]       @relation("AssignedBy")
   officerAssignments      ComplaintAssignment[]       @relation("AssignedToOfficer")
-  workerAssignments       ComplaintAssignment[]       @relation("AssignedToWorker")
-  workReviews             ComplaintAssignment[]       @relation("WorkReviewedBy")
   mediaUploads            ComplaintMedia[]
   complaintsAssignedOfficer Complaint[]               @relation("AssignedOfficer")
   aiReviews               AiAnalysis[]                @relation("AiReviewedBy")
@@ -258,10 +256,6 @@ model OfficerProfile {
   jurisdictionId String
   jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id])
   title          String?
-  employeeId     String?
-  designation    String?
-  organization   String?
-  officeLocation String?
   isActive       Boolean      @default(true)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -293,9 +287,6 @@ model FieldWorkerProfile {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   teamId    String?
   team      FieldTeam? @relation(fields: [teamId], references: [id])
-  employeeId   String?
-  designation  String?
-  organization String?
   isActive  Boolean    @default(true)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -410,17 +401,7 @@ model ComplaintAssignment {
   officer       User?            @relation("AssignedToOfficer", fields: [officerId], references: [id])
   teamId        String?
   team          FieldTeam?       @relation(fields: [teamId], references: [id])
-  workerId      String?
-  worker        User?            @relation("AssignedToWorker", fields: [workerId], references: [id])
   status        AssignmentStatus @default(PENDING)
-  workCompleted   String?
-  completionNotes String?
-  submittedAt     DateTime?
-  reviewedById    String?
-  reviewedBy      User?            @relation("WorkReviewedBy", fields: [reviewedById], references: [id])
-  reviewedAt      DateTime?
-  reviewDecision  String?
-  reviewNote      String?
   note          String?
   createdAt     DateTime         @default(now())
   acceptedAt    DateTime?

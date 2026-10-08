@@ -20,11 +20,6 @@ describe.skipIf(!enabled)('complaint lifecycle integration', () => {
   // rather than a third-party model's latency or quota.
   env.AI_PROVIDER = 'mock';
   const app = createApp(env);
-  // 1x1 PNG with real magic bytes — the media pipeline validates them.
-  const PNG = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-    'base64',
-  );
 
   afterAll(async () => {
     await prisma.$disconnect();
@@ -63,25 +58,11 @@ describe.skipIf(!enabled)('complaint lifecycle integration', () => {
       expect(step.status).toBe(200);
     }
 
-    const proof = await request(app)
-      .post(`/api/complaints/${id}/media`)
-      .set('Authorization', `Bearer ${workerToken}`)
-      .attach('file', PNG, { filename: 'after.png', contentType: 'image/png' })
-      .field('kind', 'AFTER');
-    expect(proof.status, JSON.stringify(proof.body)).toBe(201);
-
     const resolved = await request(app)
-      .post(`/api/complaints/${id}/completion`)
+      .post(`/api/complaints/${id}/status`)
       .set('Authorization', `Bearer ${workerToken}`)
-      .send({ workCompleted: 'Cleared and swept the lane', completionNotes: 'Left clean and inspected' });
+      .send({ status: 'RESOLVED', note: 'Cleared and swept' });
     expect(resolved.status, JSON.stringify(resolved.body)).toBe(200);
-
-    // Officer review is mandatory before the citizen can verify.
-    const approved = await request(app)
-      .post(`/api/complaints/${id}/review`)
-      .set('Authorization', `Bearer ${officerToken}`)
-      .send({ decision: 'APPROVE', reason: 'Work checked on site' });
-    expect(approved.status, JSON.stringify(approved.body)).toBe(200);
 
     // The assignment trail must move with the status trail.
     const assignment = await prisma.complaintAssignment.findFirst({
@@ -132,25 +113,11 @@ describe.skipIf(!enabled)('complaint lifecycle integration', () => {
       expect(step.status, JSON.stringify(step.body)).toBe(200);
     }
 
-    const proof2 = await request(app)
-      .post(`/api/complaints/${id}/media`)
-      .set('Authorization', `Bearer ${workerToken}`)
-      .attach('file', PNG, { filename: 'after2.png', contentType: 'image/png' })
-      .field('kind', 'AFTER');
-    expect(proof2.status, JSON.stringify(proof2.body)).toBe(201);
-
     const resolved = await request(app)
-      .post(`/api/complaints/${id}/completion`)
+      .post(`/api/complaints/${id}/status`)
       .set('Authorization', `Bearer ${workerToken}`)
-      .send({ workCompleted: 'Patch laid and compacted', completionNotes: 'Surface is level' });
+      .send({ status: 'RESOLVED', note: 'Patch laid' });
     expect(resolved.status, JSON.stringify(resolved.body)).toBe(200);
-
-    // Officer review is mandatory before the citizen can verify.
-    const approved = await request(app)
-      .post(`/api/complaints/${id}/review`)
-      .set('Authorization', `Bearer ${officerToken}`)
-      .send({ decision: 'APPROVE', reason: 'Patch checked on site' });
-    expect(approved.status, JSON.stringify(approved.body)).toBe(200);
 
     const verify = await request(app)
       .post(`/api/complaints/${id}/verify`)

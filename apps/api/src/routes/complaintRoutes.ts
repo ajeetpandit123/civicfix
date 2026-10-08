@@ -43,10 +43,6 @@ export function complaintRouter(env: Env): Router {
   r.get('/:id/duplicates', asyncHandler(c.duplicates));
   r.post('/:id/status', asyncHandler(c.status));
   r.post('/:id/assign', requireRoles('OFFICER', 'ADMIN'), asyncHandler(c.assign));
-  // Field worker's work report + proof (the only worker path to RESOLVED).
-  r.post('/:id/completion', requireRoles('FIELD_WORKER'), asyncHandler(c.completion));
-  // Officer approves the report or sends the work back (reason required).
-  r.post('/:id/review', requireRoles('OFFICER', 'ADMIN'), asyncHandler(c.review));
   r.post('/:id/comments', asyncHandler(c.comment));
   r.post('/:id/verify', requireRoles('CITIZEN'), asyncHandler(c.verify));
   r.post('/:id/reopen', asyncHandler(c.reopen));

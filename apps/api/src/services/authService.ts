@@ -3,13 +3,11 @@ import { SignJWT, jwtVerify } from 'jose';
 import type { Role, User, UserStatus } from '@prisma/client';
 import type { Env } from '../config/env.js';
 import { hashToken, randomToken } from '../lib/crypto.js';
-import { AppError, ConflictError, UnauthorizedError, ValidationError } from '../lib/errors.js';
+import { AppError, ConflictError, UnauthorizedError } from '../lib/errors.js';
 import { emailVerificationUrl, passwordResetMail, passwordResetUrl, verificationMail } from './emailService.js';
 import { deliverEmail } from './notificationService.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
-import { writeAudit } from './auditService.js';
-import { notifyMany } from './notificationService.js';
 
 const ACCESS_TYP = 'access';
 const REFRESH_COOKIE = 'cf_refresh';
@@ -88,107 +86,8 @@ export async function registerUser(env: Env, input: {
   });
 
   // The token exists in plaintext only here; the row above stores just its hash.
-  const mail = verificationMail(user.email, emailVerificationUrl(env.WEB_ORIGIN, verifyToken));
+  const mail = verificationMail(user.email, emailVerificationUrl(env.API_PUBLIC_URL, verifyToken));
   await deliverEmail(env, mail.to, mail.subject, mail.text);
-  return user;
-}
-
-/**
- * Staff registration (officer / field worker). Public input can only REQUEST one
- * of the two staff roles — never ADMIN — and the account starts as
- * PENDING_VERIFICATION with its employee profile but NO permissions, until an
- * admin approves it. Seed staff rows are direct (role known at creation time);
- * this path is the untrusted one, so nothing is granted here.
- */
-export async function registerStaff(
-  _env: Env,
-  input: {
-    role: 'OFFICER' | 'FIELD_WORKER';
-    name: string;
-    email: string;
-    password: string;
-    phone?: string;
-    employeeId: string;
-    designation?: string;
-    organization?: string;
-    departmentId: string;
-    jurisdictionId?: string;
-    teamId?: string;
-    officeLocation?: string;
-  },
-): Promise<User> {
-  const existing = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
-  if (existing) throw new ConflictError('An account with this email already exists');
-
-  const department = await prisma.department.findFirst({ where: { id: input.departmentId, deletedAt: null } });
-  if (!department) throw new ValidationError(`Unknown department: ${input.departmentId}`);
-  if (input.role === 'OFFICER') {
-    const jurisdiction = await prisma.jurisdiction.findFirst({
-      where: { id: input.jurisdictionId!, deletedAt: null },
-    });
-    if (!jurisdiction) throw new ValidationError(`Unknown jurisdiction: ${input.jurisdictionId}`);
-  } else {
-    const team = await prisma.fieldTeam.findFirst({ where: { id: input.teamId!, deletedAt: null } });
-    if (!team) throw new ValidationError(`Unknown field team: ${input.teamId}`);
-  }
-
-  const passwordHash = await hashPassword(input.password);
-  const user = await prisma.user.create({
-    data: {
-      email: input.email.toLowerCase(),
-      passwordHash,
-      name: input.name,
-      phone: input.phone,
-      role: input.role,
-      status: 'PENDING_VERIFICATION',
-    },
-  });
-
-  if (input.role === 'OFFICER') {
-    await prisma.officerProfile.create({
-      data: {
-        userId: user.id,
-        departmentId: department.id,
-        jurisdictionId: input.jurisdictionId!,
-        title: input.designation ?? 'Municipal Officer',
-        employeeId: input.employeeId,
-        designation: input.designation,
-        organization: input.organization,
-        officeLocation: input.officeLocation,
-        isActive: true,
-      },
-    });
-  } else {
-    await prisma.fieldWorkerProfile.create({
-      data: {
-        userId: user.id,
-        teamId: input.teamId ?? null,
-        employeeId: input.employeeId,
-        designation: input.designation,
-        organization: input.organization,
-        isActive: true,
-      },
-    });
-  }
-
-  await writeAudit({
-    actorId: user.id,
-    action: 'staff.request',
-    entityType: 'User',
-    entityId: user.id,
-    metadata: { role: input.role, employeeId: input.employeeId, departmentId: department.id },
-  });
-
-  const admins = await prisma.user.findMany({ where: { role: 'ADMIN', status: 'ACTIVE', deletedAt: null } });
-  await notifyMany(
-    admins.map((a) => a.id),
-    {
-      type: 'VERIFICATION_REQUIRED',
-      title: 'New staff verification request',
-      body: `${user.name} (${input.role}, employee ID ${input.employeeId}) is waiting for approval.`,
-    },
-  );
-
   return user;
 }
 
@@ -303,7 +202,7 @@ export async function requestPasswordReset(env: Env, email: string): Promise<voi
   logger.info({ to: user.email }, 'password_reset_issued');
 
   // Only the hash is persisted, so the link must leave the process right now.
-  const mail = passwordResetMail(user.email, passwordResetUrl(env.WEB_ORIGIN, token));
+  const mail = passwordResetMail(user.email, passwordResetUrl(env.API_PUBLIC_URL, token));
   await deliverEmail(env, mail.to, mail.subject, mail.text);
 }
 

@@ -1,5 +1,5 @@
 import type { CookieOptions, Request, Response } from 'express';
-import { loginSchema, registerSchema, staffRegisterSchema } from '@civicfix/shared';
+import { loginSchema, registerSchema } from '@civicfix/shared';
 import type { Env } from '../config/env.js';
 import { parseJson } from '../middleware/asyncHandler.js';
 import {
@@ -7,7 +7,6 @@ import {
   publicUser,
   refreshCookieName,
   registerUser,
-  registerStaff,
   requestPasswordReset,
   resetPassword,
   revokeRefreshToken,
@@ -30,17 +29,12 @@ function cookieOpts(env: Env): CookieOptions {
 
 export function authController(env: Env) {
   return {
-    registerStaff: async (req: Request, res: Response) => {
-      const body = parseJson(staffRegisterSchema, req.body);
-      await registerStaff(env, body);
-      res.status(201).json({ ok: true });
-    },
     register: async (req: Request, res: Response) => {
       const body = parseJson(registerSchema, req.body);
       const user = await registerUser(env, body);
       res.status(201).json({
         user: publicUser(user),
-        message: 'Account created. Check your email to verify the address — or use the seeded demo users.',
+        message: 'Account created. In this demo environment an admin may activate accounts, or use seeded demo users.',
       });
     },
     login: async (req: Request, res: Response) => {

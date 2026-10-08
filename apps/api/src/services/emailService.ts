@@ -72,74 +72,12 @@ export function createMailer(cfg: MailerConfig, transport?: MailTransport): Mail
   };
 }
 
-/**
- * Links in emails are opened in a browser, so `webBaseUrl` is the WEB app origin
- * (env.WEB_ORIGIN) — never the API, which serves JSON only.
- */
-export function passwordResetUrl(webBaseUrl: string, token: string): string {
-  return `${webBaseUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
+export function passwordResetUrl(apiPublicUrl: string, token: string): string {
+  return `${apiPublicUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
 }
 
-export function emailVerificationUrl(webBaseUrl: string, token: string): string {
-  return `${webBaseUrl.replace(/\/$/, '')}/verify-email?token=${encodeURIComponent(token)}`;
-}
-
-/**
- * Composes the "your complaint has been resolved" mail. Every value comes from
- * the database — nothing about a specific complaint is hardcoded here.
- */
-export function resolutionMail(input: {
-  to: string;
-  citizenName: string;
-  publicId: string;
-  title: string;
-  departmentName: string;
-}): MailMessage {
-  return {
-    to: input.to,
-    subject: 'CivicFix — Your Civic Complaint Has Been Resolved',
-    text: [
-      `Hello ${input.citizenName},`,
-      '',
-      'Thank you for using CivicFix and for taking the time to report a civic issue in your area.',
-      '',
-      'We are happy to inform you that your complaint has been successfully resolved.',
-      '',
-      'Complaint ID:',
-      input.publicId,
-      '',
-      'Issue:',
-      input.title,
-      '',
-      'Department:',
-      input.departmentName,
-      '',
-      'Status:',
-      'Resolved',
-      '',
-      'Thank you for helping improve your community by reporting civic problems.',
-      'Your contribution helps make our streets and neighborhoods safer and better.',
-      '',
-      'Regards,',
-      'CivicFix Team',
-    ].join('\n'),
-  };
-}
-
-/**
- * Sends the resolution mail. Unlike the auth mails this must NEVER throw into
- * the approval path: the officer's approval is already committed when the mail
- * goes out, and a mail transport failure must not undo or block it.
- */
-export async function sendResolution(
-  mailer: Mailer,
-  input: Parameters<typeof resolutionMail>[0],
-): Promise<void> {
-  try {
-    await mailer.send(resolutionMail(input));
-  } catch (err) {
-    logger.error({ err, to: input.to }, 'resolution_email_failed');
-  }
+export function emailVerificationUrl(apiPublicUrl: string, token: string): string {
+  return `${apiPublicUrl.replace(/\/$/, '')}/verify-email?token=${encodeURIComponent(token)}`;
 }
 
 /**
@@ -180,11 +118,11 @@ export function verificationMail(to: string, link: string): MailMessage {
 /** Sends a password reset link. Never throws into the caller's request path. */
 export async function sendPasswordReset(
   mailer: Mailer,
-  webBaseUrl: string,
+  apiPublicUrl: string,
   to: string,
   token: string,
 ): Promise<void> {
-  const link = passwordResetUrl(webBaseUrl, token);
+  const link = passwordResetUrl(apiPublicUrl, token);
   try {
     await mailer.send(passwordResetMail(to, link));
   } catch (err) {
@@ -195,11 +133,11 @@ export async function sendPasswordReset(
 
 export async function sendVerification(
   mailer: Mailer,
-  webBaseUrl: string,
+  apiPublicUrl: string,
   to: string,
   token: string,
 ): Promise<void> {
-  const link = emailVerificationUrl(webBaseUrl, token);
+  const link = emailVerificationUrl(apiPublicUrl, token);
   try {
     await mailer.send(verificationMail(to, link));
   } catch (err) {

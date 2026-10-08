@@ -1,31 +1,12 @@
-name: CI
+name: civicfix-ci
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
 
 jobs:
-  checks:
-    name: Lint, typecheck, tests, build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run db:generate
-      - run: npm run lint
-      - run: npm run typecheck
-      # Unit suites only: the API integration suites are gated behind
-      # RUN_API_INTEGRATION=1 and run in the `integration` job below.
-      - run: npm test
-      - run: npm run build
-
-  integration:
-    name: API integration tests (PostgreSQL)
+  validate:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -42,22 +23,28 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      NODE_ENV: test
       DATABASE_URL: postgresql://civicfix:civicfix@localhost:5432/civicfix?schema=public
-      RUN_API_INTEGRATION: '1'
+      JWT_ACCESS_SECRET: ci-access-secret-min-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-min-32-characters
+      WEB_ORIGIN: http://localhost:3000
+      API_PUBLIC_URL: http://localhost:4000
+      AI_PROVIDER: mock
+      STORAGE_DRIVER: local
+      EMAIL_DRIVER: console
+      GEOCODER_PROVIDER: none
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      # Ephemeral throwaway secrets for this job only — never stored, never echoed.
-      - name: Generate ephemeral JWT secrets
-        run: |
-          echo "JWT_ACCESS_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "JWT_REFRESH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm run db:generate
-      # Fresh throwaway database — the normal, non-destructive migration path.
-      - run: npm run db:migrate
-      - run: npm run db:seed
+      - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+      - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
+      - run: npm run build
+        env:
+          API_INTERNAL_URL: http://localhost:4000

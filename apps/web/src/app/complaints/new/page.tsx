@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
 import { Button } from '@/components/ui/button';
@@ -11,41 +11,19 @@ import { apiFetch } from '@/lib/api';
 
 const steps = ['Problem', 'Photo', 'Details', 'Location', 'Review', 'Done'];
 
-// Map camera start only (New Delhi). Never sent as the complaint's location —
-// the citizen must move the pin or use GPS before this wizard can continue.
-const MAP_CAMERA = { latitude: 28.6139, longitude: 77.209 };
-
-// Mirrors PRIORITIES from the shared package (the web app keeps its own constants).
-const PRIORITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
-
-// Field limits mirror createComplaintSchema in the shared package, so the wizard
-// can never send a payload the API has to reject.
-const LIMITS = {
-  title: { min: 5, max: 160 },
-  description: { min: 10, max: 4000 },
-  landmark: { max: 200 },
-  address: { min: 3, max: 500 },
-} as const;
-
-type CatalogCategory = { id: string; code: string; name: string };
-
 export default function NewComplaintPage() {
   const { token } = useAuth();
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [landmark, setLandmark] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [priority, setPriority] = useState('');
+  const [title, setTitle] = useState('Garbage has not been collected');
+  const [description, setDescription] = useState('Garbage has not been collected for the last 5 days.');
+  const [landmark, setLandmark] = useState("Near Domino's");
   const [file, setFile] = useState<File | null>(null);
-  const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [loc, setLoc] = useState({
-    latitude: MAP_CAMERA.latitude,
-    longitude: MAP_CAMERA.longitude,
-    address: '',
+    latitude: 28.7196,
+    longitude: 77.175,
+    address: 'Adarsh Nagar, Delhi',
   });
-  const [locPicked, setLocPicked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [created, setCreated] = useState<{
@@ -57,13 +35,6 @@ export default function NewComplaintPage() {
     priority: string;
     aiAnalyses?: Array<{ summary: string | null; severity: string | null; categoryCode: string | null }>;
   } | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    apiFetch<{ categories: CatalogCategory[] }>('/api/complaints/meta/categories', { token })
-      .then((data) => setCategories(data.categories))
-      .catch(() => setCategories([]));
-  }, [token]);
 
   async function submit() {
     setPending(true);
@@ -77,9 +48,7 @@ export default function NewComplaintPage() {
           body: JSON.stringify({
             title,
             description,
-            ...(categoryId ? { categoryId } : {}),
-            ...(priority ? { priority } : {}),
-            ...(landmark.trim() ? { landmark: landmark.trim() } : {}),
+            landmark,
             latitude: loc.latitude,
             longitude: loc.longitude,
             address: loc.address,
@@ -105,26 +74,6 @@ export default function NewComplaintPage() {
     }
   }
 
-  const titleLength = title.trim().length;
-  const descriptionLength = description.trim().length;
-  const landmarkLength = landmark.trim().length;
-  const addressLength = loc.address.trim().length;
-
-  const titleValid = titleLength >= LIMITS.title.min && titleLength <= LIMITS.title.max;
-  const descriptionValid =
-    descriptionLength >= LIMITS.description.min && descriptionLength <= LIMITS.description.max;
-  const landmarkValid = landmarkLength <= LIMITS.landmark.max;
-  const addressValid = addressLength >= LIMITS.address.min && addressLength <= LIMITS.address.max;
-
-  const canContinue =
-    step === 0
-      ? titleValid
-      : step === 2
-        ? descriptionValid && landmarkValid
-        : step === 3
-          ? locPicked && addressValid
-          : true;
-
   return (
     <AppShell>
       <h1 className="font-display text-3xl font-semibold">Report an issue</h1>
@@ -143,17 +92,6 @@ export default function NewComplaintPage() {
           <div>
             <Label htmlFor="title">What problem are you reporting?</Label>
             <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
-            {titleLength > LIMITS.title.max ? (
-              <p className="mt-1 text-xs text-red-700">
-                The problem line must be {LIMITS.title.max} characters or fewer (you have {titleLength}). Move the extra
-                detail to the Details step.
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-slate-500">
-                A short headline of {LIMITS.title.min}–{LIMITS.title.max} characters (you have {titleLength}). Put the
-                full story in Details.
-              </p>
-            )}
           </div>
         )}
         {step === 1 && (
@@ -167,85 +105,20 @@ export default function NewComplaintPage() {
             <div>
               <Label htmlFor="desc">Describe the problem</Label>
               <Textarea id="desc" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} />
-              {descriptionLength > LIMITS.description.max ? (
-                <p className="mt-1 text-xs text-red-700">
-                  Description must be {LIMITS.description.max} characters or fewer (you have {descriptionLength}).
-                </p>
-              ) : (
-                <p className="mt-1 text-xs text-slate-500">
-                  At least {LIMITS.description.min} characters (you have {descriptionLength}).
-                </p>
-              )}
             </div>
             <div>
               <Label htmlFor="landmark">Landmark (optional)</Label>
               <Input id="landmark" value={landmark} onChange={(e) => setLandmark(e.target.value)} />
-              {landmarkLength > LIMITS.landmark.max ? (
-                <p className="mt-1 text-xs text-red-700">
-                  Landmark must be {LIMITS.landmark.max} characters or fewer (you have {landmarkLength}).
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <Label htmlFor="category">Category (optional)</Label>
-              <select
-                id="category"
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-              >
-                <option value="">Let CivicFix classify automatically</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label htmlFor="priority">Priority (optional)</Label>
-              <select
-                id="priority"
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-              >
-                <option value="">Let CivicFix assess</option>
-                {PRIORITY_OPTIONS.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
         )}
         {step === 3 && (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              Set the exact spot of the problem: move the pin, type an address, or use your location. A street address is
-              required so the department can find it.
-            </p>
-            <LocationPicker
-              latitude={loc.latitude}
-              longitude={loc.longitude}
-              address={loc.address}
-              onChange={(next) => {
-                setLoc((prev) => ({ ...prev, ...next, address: next.address ?? prev.address }));
-                setLocPicked(true);
-              }}
-            />
-            {!locPicked ? <p className="text-sm text-amber-700">Pick the location to continue.</p> : null}
-            {addressLength > LIMITS.address.max ? (
-              <p className="text-xs text-red-700">
-                Address must be {LIMITS.address.max} characters or fewer (you have {addressLength}).
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500">
-                Address: {addressLength} / {LIMITS.address.max} characters.
-              </p>
-            )}
-          </div>
+          <LocationPicker
+            latitude={loc.latitude}
+            longitude={loc.longitude}
+            address={loc.address}
+            onChange={(next) => setLoc({ ...loc, ...next })}
+          />
         )}
         {step === 4 && (
           <dl className="space-y-2 text-sm">
@@ -256,14 +129,6 @@ export default function NewComplaintPage() {
             <div>
               <dt className="font-semibold">Details</dt>
               <dd>{description}</dd>
-            </div>
-            <div>
-              <dt className="font-semibold">Category</dt>
-              <dd>{categories.find((c) => c.id === categoryId)?.name ?? 'Automatic classification'}</dd>
-            </div>
-            <div>
-              <dt className="font-semibold">Priority</dt>
-              <dd>{priority || 'Automatic assessment'}</dd>
             </div>
             <div>
               <dt className="font-semibold">Location</dt>
@@ -310,7 +175,7 @@ export default function NewComplaintPage() {
               Back
             </Button>
             {step < 4 ? (
-              <Button type="button" disabled={!canContinue} onClick={() => setStep((s) => s + 1)}>
+              <Button type="button" onClick={() => setStep((s) => s + 1)}>
                 Continue
               </Button>
             ) : (

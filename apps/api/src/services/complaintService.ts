@@ -10,7 +10,6 @@ import { prisma } from '../lib/prisma.js';
 import { writeAudit } from './auditService.js';
 import { nextPublicId } from './idService.js';
 import { getJobQueue } from '../jobs/jobQueue.js';
-import { createMailer, sendResolution } from './emailService.js';
 import { notify, notifyMany } from './notificationService.js';
 import { routeComplaint } from './routingService.js';
 import { applySla } from './slaService.js';
@@ -28,11 +27,7 @@ const complaintInclude = {
   citizen: { select: { id: true, name: true } },
   statusHistory: { orderBy: { createdAt: 'asc' as const } },
   media: { orderBy: { createdAt: 'asc' as const } },
-  assignments: {
-    orderBy: { createdAt: 'desc' as const },
-    take: 10,
-    include: { worker: { select: { id: true, name: true } } },
-  },
+  assignments: { orderBy: { createdAt: 'desc' as const }, take: 10 },
 } satisfies Prisma.ComplaintInclude;
 
 export type Actor = { id: string; role: Role; email: string };
@@ -78,15 +73,8 @@ export async function loadAuthorizedComplaint(actor: Actor, id: string) {
 
   if (actor.role === 'FIELD_WORKER') {
     const worker = await prisma.fieldWorkerProfile.findUnique({ where: { userId: actor.id } });
-    const onTeam = Boolean(worker?.teamId) && complaint.assignedTeamId === worker!.teamId;
-    const personallyNamed = await prisma.complaintAssignment.count({
-      where: {
-        complaintId: complaint.id,
-        workerId: actor.id,
-        status: { notIn: ['REASSIGNED', 'DECLINED'] },
-      },
-    });
-    if (!onTeam && personallyNamed === 0) throw new ForbiddenError();
+    const onTeam = worker?.teamId && complaint.assignedTeamId === worker.teamId;
+    if (!onTeam) throw new ForbiddenError();
   }
 
   return complaint;
@@ -97,17 +85,8 @@ type AssignmentRow = {
   status: string;
   officerId?: string | null;
   teamId?: string | null;
-  workerId?: string | null;
-  worker?: { id: string; name: string } | null;
   note?: string | null;
   assignedById?: string | null;
-  workCompleted?: string | null;
-  completionNotes?: string | null;
-  submittedAt?: Date | null;
-  reviewedById?: string | null;
-  reviewedAt?: Date | null;
-  reviewDecision?: string | null;
-  reviewNote?: string | null;
 };
 
 const ACTIVE_ASSIGNMENT_STATUSES = ['PENDING', 'ACCEPTED'];
@@ -213,30 +192,15 @@ export function presentComplaint<T extends object>(actor: Actor, complaint: T): 
 
   const assignments = (src.assignments ?? []) as unknown as AssignmentRow[];
   const active = assignments.filter((a) => ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
-  // External viewers see the work in play with its report and the officer's
-  // verdict — but never the internal note or the internal actor ids; those stay
-  // on the internal view returned above.
   view.assignments = active.map((a) => ({
     id: a.id,
     status: a.status,
     teamId: a.teamId ?? null,
     officerId: a.officerId ?? null,
-    workerId: a.workerId ?? null,
-    worker: a.worker ?? null,
-    workCompleted: a.workCompleted ?? null,
-    completionNotes: a.completionNotes ?? null,
-    submittedAt: a.submittedAt ?? null,
-    reviewedById: a.reviewedById ?? null,
-    reviewedAt: a.reviewedAt ?? null,
-    reviewDecision: a.reviewDecision ?? null,
-    reviewNote: a.reviewNote ?? null,
   }));
 
-  // Never imply an individual is responsible unless something actually names
-  // one: either the routing table's officer (recorded at creation) or an active
-  // assignment.
-  const routedOfficer = Boolean((src as { assignedOfficerId?: string | null }).assignedOfficerId);
-  view.assignedOfficer = active.some((a) => a.officerId) || routedOfficer ? view.assignedOfficer : null;
+  // Never imply an individual is responsible when no active assignment names one.
+  view.assignedOfficer = active.some((a) => a.officerId) ? view.assignedOfficer : null;
 
   return view;
 }
@@ -322,11 +286,6 @@ export async function createComplaint(
       areaId: routing.kind === 'mapped' ? routing.areaId : routing.areaId,
       jurisdictionId: routing.kind === 'mapped' ? routing.jurisdictionId : routing.jurisdictionId,
       departmentId: routing.kind === 'mapped' ? routing.departmentId : undefined,
-      // The routing table already names the responsible officer for this
-      // department + jurisdiction: record them so the complaint carries its
-      // owner from the first moment (workflow step "system finds responsible
-      // officer").
-      assignedOfficerId: routing.kind === 'mapped' ? routing.defaultOfficerUserId : undefined,
       duplicateOfId: input.attachToComplaintId,
     },
   });
@@ -540,22 +499,8 @@ export async function listComplaints(
   const where: Prisma.ComplaintWhereInput = { deletedAt: null };
   if (actor.role === 'CITIZEN') where.citizenId = actor.id;
   if (actor.role === 'FIELD_WORKER') {
-    // "My work" = the crew's queue plus anything naming this worker directly.
     const worker = await prisma.fieldWorkerProfile.findUnique({ where: { userId: actor.id } });
-    const existingClauses = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
-    where.AND = [
-      ...existingClauses,
-      {
-        OR: [
-          ...(worker?.teamId ? [{ assignedTeamId: worker.teamId }] : []),
-          {
-            assignments: {
-              some: { workerId: actor.id, status: { notIn: ['REASSIGNED', 'DECLINED'] } },
-            },
-          },
-        ],
-      },
-    ];
+    where.assignedTeamId = worker?.teamId ?? '__none__';
   }
   if (actor.role === 'OFFICER') {
     const profile = await prisma.officerProfile.findUnique({ where: { userId: actor.id } });
@@ -601,205 +546,7 @@ export async function listComplaints(
   return { total, page: query.page, pageSize: query.pageSize, items };
 }
 
-/**
- * Field worker submits the work report + proof of the fixed problem. The
- * complaint goes to RESOLVED (= work done, awaiting officer review) and the
- * responsible officer is asked to approve or send it back.
- */
-export async function submitCompletion(
-  actor: Actor,
-  complaintId: string,
-  input: { workCompleted: string; completionNotes?: string },
-) {
-  if (actor.role !== 'FIELD_WORKER') throw new ForbiddenError();
-  const complaint = await loadAuthorizedComplaint(actor, complaintId);
-
-  // Proof of work is part of the report: at least one "after" photo.
-  const proofCount = await prisma.complaintMedia.count({
-    where: { complaintId: complaint.id, kind: 'AFTER' },
-  });
-  if (proofCount === 0) {
-    throw new ValidationError('Upload an AFTER photo as proof of the completed work first');
-  }
-
-  const worker = await prisma.fieldWorkerProfile.findUnique({ where: { userId: actor.id } });
-  const assignment = await prisma.complaintAssignment.findFirst({
-    where: {
-      complaintId: complaint.id,
-      status: { in: ['PENDING', 'ACCEPTED'] },
-      OR: [{ workerId: actor.id }, ...(worker?.teamId ? [{ teamId: worker.teamId }] : [])],
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-  if (!assignment) throw new ForbiddenError();
-
-  await prisma.complaintAssignment.update({
-    where: { id: assignment.id },
-    data: {
-      workerId: actor.id,
-      workCompleted: input.workCompleted,
-      completionNotes: input.completionNotes ?? null,
-      submittedAt: new Date(),
-      // A resubmission is a fresh review: clear the previous verdict.
-      reviewedById: null,
-      reviewedAt: null,
-      reviewDecision: null,
-      reviewNote: null,
-    },
-  });
-  await writeAudit({
-    actorId: actor.id,
-    action: 'complaint.completion_submitted',
-    entityType: 'Complaint',
-    entityId: complaint.id,
-    metadata: { assignmentId: assignment.id },
-  });
-
-  const resolved = await applyTransition(
-    actor,
-    complaint.id,
-    'RESOLVED',
-    'Completion report submitted for officer review',
-  );
-
-  const officerId = (complaint as unknown as { assignedOfficerId?: string | null }).assignedOfficerId;
-  if (officerId && officerId !== actor.id) {
-    await notify({
-      userId: officerId,
-      complaintId: complaint.id,
-      type: 'RESOLUTION_SUBMITTED',
-      title: `${complaint.publicId}: completion report submitted`,
-      body: 'A field worker finished the job. Review the report and approve or send it back.',
-    });
-  }
-  return resolved;
-}
-
-/**
- * Officer reviews the submitted work: APPROVE (-> citizen verification) or
- * REJECT / send it back to the worker (reason required).
- */
-export async function reviewCompletion(
-  env: Env,
-  actor: Actor,
-  complaintId: string,
-  input: { decision: 'APPROVE' | 'REJECT'; reason?: string },
-) {
-  if (actor.role !== 'OFFICER' && actor.role !== 'ADMIN') throw new ForbiddenError();
-  const complaint = await loadAuthorizedComplaint(actor, complaintId);
-  const submitted = await prisma.complaintAssignment.findFirst({
-    where: { complaintId: complaint.id, submittedAt: { not: null } },
-    orderBy: { submittedAt: 'desc' },
-  });
-  if (complaint.status !== 'RESOLVED' || !submitted) {
-    throw new ValidationError('There is no submitted completion report to review');
-  }
-
-  const reason = input.reason?.trim() || null;
-  if (input.decision === 'REJECT' && (!reason || reason.length < 5)) {
-    throw new ValidationError('A rejection reason is required (at least 5 characters)');
-  }
-
-  await prisma.complaintAssignment.update({
-    where: { id: submitted.id },
-    data: {
-      reviewedById: actor.id,
-      reviewedAt: new Date(),
-      reviewDecision: input.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED',
-      reviewNote: reason,
-      // Sent back = the worker holds the job again.
-      ...(input.decision === 'REJECT' ? { status: 'ACCEPTED' } : {}),
-    },
-  });
-  await writeAudit({
-    actorId: actor.id,
-    action: input.decision === 'APPROVE' ? 'complaint.officer_approved' : 'complaint.officer_rejected',
-    entityType: 'Complaint',
-    entityId: complaint.id,
-    metadata: { assignmentId: submitted.id, reason },
-  });
-
-  if (input.decision === 'APPROVE') {
-    const verified = await applyTransition(actor, complaint.id, 'CITIZEN_VERIFICATION', 'Field work approved');
-    await notify({
-      userId: complaint.citizenId,
-      complaintId: complaint.id,
-      type: 'VERIFICATION_REQUIRED',
-      title: `${complaint.publicId}: work approved`,
-      body: 'The officer approved the fix. Please verify the resolution.',
-    });
-
-    // The resolution email goes out exactly once and only here: the approval
-    // transition is one-shot, and the audit marker guards against any re-entry.
-    // A mail failure must never undo or block the approval.
-    const citizen = await prisma.user.findUnique({ where: { id: complaint.citizenId } });
-    const alreadySent = await prisma.auditLog.findFirst({
-      where: { action: 'complaint.resolution_email_sent', entityId: complaint.id },
-    });
-    if (citizen?.email && !alreadySent) {
-      await sendResolution(
-        createMailer({
-          driver: env.EMAIL_DRIVER,
-          from: env.SMTP_FROM,
-          smtp: env.SMTP_HOST
-            ? { host: env.SMTP_HOST, port: env.SMTP_PORT ?? 587, user: env.SMTP_USER, pass: env.SMTP_PASS }
-            : undefined,
-        }),
-        {
-          to: citizen.email,
-          citizenName: citizen.name,
-          publicId: complaint.publicId,
-          title: complaint.title,
-          departmentName: complaint.department?.name ?? 'the responsible department',
-        },
-      );
-      await writeAudit({
-        actorId: actor.id,
-        action: 'complaint.resolution_email_sent',
-        entityType: 'Complaint',
-        entityId: complaint.id,
-        metadata: { to: citizen.email },
-      });
-    }
-    return verified;
-  }
-
-  const sentBack = await applyTransition(actor, complaint.id, 'IN_PROGRESS', reason ?? 'Work sent back');
-  if (submitted.workerId) {
-    await notifyMany([submitted.workerId], {
-      complaintId: complaint.id,
-      type: 'COMPLAINT_REVIEWED',
-      title: `${complaint.publicId}: work sent back`,
-      body: reason ?? 'The officer sent the job back for rework.',
-    });
-  }
-  return sentBack;
-}
-
-/**
- * Generic status move. A field worker reaching RESOLVED must go through
- * submitCompletion instead, so the officer always has a work report to review.
- */
 export async function transitionStatus(
-  actor: Actor,
-  complaintId: string,
-  to: ComplaintStatus,
-  note?: string,
-) {
-  if (actor.role === 'FIELD_WORKER' && to === 'RESOLVED') {
-    throw new ValidationError(
-      'Submit the completion report via POST /api/complaints/:id/completion',
-    );
-  }
-  if (to === 'CITIZEN_VERIFICATION') {
-    // Approving submitted work is the officer's verdict (it stamps the review),
-    // so it can only happen through the review endpoint.
-    throw new ValidationError('Approve or reject the submitted work via POST /api/complaints/:id/review');
-  }
-  return applyTransition(actor, complaintId, to, note);
-}
-
-async function applyTransition(
   actor: Actor,
   complaintId: string,
   to: ComplaintStatus,
@@ -858,7 +605,7 @@ async function applyTransition(
 export async function assignComplaint(
   actor: Actor,
   complaintId: string,
-  input: { officerId?: string; teamId?: string; workerId?: string; note?: string },
+  input: { officerId?: string; teamId?: string; note?: string },
 ) {
   if (actor.role !== 'OFFICER' && actor.role !== 'ADMIN') throw new ForbiddenError();
   const complaint = await loadAuthorizedComplaint(actor, complaintId);
@@ -868,28 +615,6 @@ export async function assignComplaint(
   if (input.teamId) {
     const team = await prisma.fieldTeam.findFirst({ where: { id: input.teamId, deletedAt: null } });
     if (!team) throw new ValidationError(`Unknown field team: ${input.teamId}`);
-  }
-
-  // An individually named field worker must actually be one: active account,
-  // active profile, and on a crew of the responsible department.
-  let teamId = input.teamId;
-  let workerUserId: string | undefined;
-  if (input.workerId) {
-    const worker = await prisma.fieldWorkerProfile.findUnique({
-      where: { userId: input.workerId },
-      include: { user: true, team: true },
-    });
-    if (!worker || !worker.isActive || worker.user.deletedAt || worker.user.status !== 'ACTIVE' || worker.user.role !== 'FIELD_WORKER') {
-      throw new ValidationError('Unknown field worker');
-    }
-    if (complaint.departmentId && worker.team?.departmentId && worker.team.departmentId !== complaint.departmentId) {
-      throw new ValidationError('That field worker is not in the responsible department');
-    }
-    if (input.teamId && worker.teamId && input.teamId !== worker.teamId) {
-      throw new ValidationError('That field worker does not belong to the selected team');
-    }
-    workerUserId = worker.userId;
-    teamId = teamId ?? worker.teamId ?? undefined;
   }
 
   await prisma.complaintAssignment.updateMany({
@@ -903,8 +628,7 @@ export async function assignComplaint(
       complaintId: complaint.id,
       assignedById: actor.id,
       officerId: input.officerId,
-      teamId,
-      workerId: workerUserId,
+      teamId: input.teamId,
       note: input.note,
       status: 'PENDING',
     },
@@ -914,7 +638,7 @@ export async function assignComplaint(
     where: { id: complaint.id },
     data: {
       assignedOfficerId: input.officerId,
-      assignedTeamId: teamId,
+      assignedTeamId: input.teamId,
       status: 'ASSIGNED',
     },
   });
@@ -928,25 +652,15 @@ export async function assignComplaint(
     },
   });
 
-  // The named worker is notified directly; a whole crew is notified when the
-  // assignment is team-wide.
-  const recipients = new Set<string>();
-  if (workerUserId) recipients.add(workerUserId);
-  if (teamId) {
-    const members = await prisma.fieldWorkerProfile.findMany({ where: { teamId } });
-    for (const m of members) recipients.add(m.userId);
-  }
-  recipients.delete(actor.id);
-  if (recipients.size > 0) {
+  if (input.teamId) {
+    const members = await prisma.fieldWorkerProfile.findMany({ where: { teamId: input.teamId } });
     await notifyMany(
-      [...recipients],
+      members.map((m) => m.userId),
       {
         complaintId: complaint.id,
         type: 'COMPLAINT_ASSIGNED',
         title: `Assigned ${complaint.publicId}`,
-        body: workerUserId
-          ? 'You have been named on a field assignment. Accept to start.'
-          : 'A new field assignment is waiting for acceptance.',
+        body: 'A new field assignment is waiting for acceptance.',
       },
     );
   }

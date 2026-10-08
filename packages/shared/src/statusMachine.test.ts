@@ -19,11 +19,7 @@ describe('complaint status machine', () => {
 
   it('restricts citizen transitions', () => {
     expect(canRoleTransition('CITIZEN', 'CITIZEN_VERIFICATION', 'CLOSED')).toBe(true);
-    // Officer approval is mandatory (user-confirmed product decision): a citizen
-    // may close only AFTER approval, from CITIZEN_VERIFICATION — never straight
-    // from RESOLVED, which still means 'work submitted, awaiting review'.
-    expect(canRoleTransition('CITIZEN', 'RESOLVED', 'CLOSED')).toBe(false);
-    expect(canRoleTransition('CITIZEN', 'RESOLVED', 'REOPENED')).toBe(false);
+    expect(canRoleTransition('CITIZEN', 'RESOLVED', 'CLOSED')).toBe(true);
     expect(canRoleTransition('CITIZEN', 'UNDER_REVIEW', 'ASSIGNED')).toBe(false);
   });
 

@@ -73,11 +73,6 @@ export default function LoginPage() {
         ))}
       </ul>
       <p className="mt-6 text-sm">
-        <Link className="font-semibold text-civic-700" href="/forgot-password">
-          Forgot password?
-        </Link>
-      </p>
-      <p className="mt-3 text-sm">
         No account?{' '}
         <Link className="font-semibold text-civic-700" href="/register">
           Register

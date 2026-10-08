@@ -31,7 +31,6 @@ export default function WorkerDashboard() {
   const { token } = useAuth();
   const qc = useQueryClient();
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [workDone, setWorkDone] = useState<Record<string, string>>({});
   const [uploads, setUploads] = useState<UploadsByTask>({});
 
   const { data } = useQuery({
@@ -59,17 +58,6 @@ export default function WorkerDashboard() {
       return apiFetch(`/api/complaints/${input.id}/media`, { method: 'POST', token: token!, body: form });
     },
     onSuccess: (_data, input) => setUploads((prev) => addKind(prev, input.id, input.kind)),
-  });
-
-  /** The completion report is the only worker path to RESOLVED (after photo required). */
-  const complete = useMutation({
-    mutationFn: (input: { id: string; workCompleted: string; completionNotes?: string }) =>
-      apiFetch(`/api/complaints/${input.id}/completion`, {
-        method: 'POST',
-        token: token!,
-        body: JSON.stringify({ workCompleted: input.workCompleted, completionNotes: input.completionNotes }),
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['worker-tasks'] }),
   });
 
   return (
@@ -128,34 +116,12 @@ export default function WorkerDashboard() {
                   </Button>
                 )}
                 {status === 'IN_PROGRESS' && (
-                  <div className="w-full space-y-2 rounded-lg border border-slate-200 p-3">
-                    <p className="text-sm font-semibold">Completion report</p>
-                    <Textarea
-                      value={workDone[c.id] ?? ''}
-                      onChange={(e) => setWorkDone((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                      placeholder="What was done (required — e.g. 'Repaired the wiring and replaced the bulb')"
-                    />
-                    <Textarea
-                      value={note}
-                      onChange={(e) => setNotes((prev) => setNoteFor(prev, c.id, e.target.value))}
-                      placeholder="Completion notes (optional — e.g. 'Light tested successfully')"
-                    />
-                    <Button
-                      disabled={!actions.canComplete || (workDone[c.id] ?? '').trim().length < 10}
-                      onClick={() =>
-                        complete.mutate({
-                          id: c.id,
-                          workCompleted: workDone[c.id] ?? '',
-                          completionNotes: note,
-                        })
-                      }
-                    >
-                      Submit for officer verification
-                    </Button>
-                    {actions.showCompletionHint ? (
-                      <p className="text-xs text-amber-700">Upload an AFTER photo as proof before submitting.</p>
-                    ) : null}
-                  </div>
+                  <Button
+                    disabled={!actions.canComplete}
+                    onClick={() => act.mutate({ id: c.id, status: 'RESOLVED', note })}
+                  >
+                    Mark complete
+                  </Button>
                 )}
 
                 <label className="rounded-lg border px-3 py-2 text-sm">

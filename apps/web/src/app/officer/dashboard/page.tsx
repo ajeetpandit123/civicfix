@@ -6,6 +6,7 @@ import { AppShell } from '@/components/AppShell';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useAuth } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
+import { Input } from '@/components/ui/field';
 import { useState } from 'react';
 
 export default function OfficerDashboard() {

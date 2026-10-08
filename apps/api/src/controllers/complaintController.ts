@@ -3,9 +3,7 @@ import {
   assignSchema,
   commentSchema,
   createComplaintSchema,
-  completionSchema,
   paginationSchema,
-  reviewSchema,
   statusChangeSchema,
   verifySchema,
 } from '@civicfix/shared';
@@ -19,8 +17,6 @@ import {
   listComplaints,
   loadAuthorizedComplaint,
   presentComplaint,
-  reviewCompletion,
-  submitCompletion,
   transitionStatus,
   verifyResolution,
 } from '../services/complaintService.js';
@@ -86,16 +82,6 @@ export function complaintController(env: Env) {
     verify: async (req: Request, res: Response) => {
       const body = parseJson(verifySchema, req.body);
       const complaint = await verifyResolution(req.user!, param(req, 'id'), body.resolved, body.reason);
-      res.json({ complaint: presentComplaint(req.user!, complaint) });
-    },
-    completion: async (req: Request, res: Response) => {
-      const body = parseJson(completionSchema, req.body);
-      const complaint = await submitCompletion(req.user!, param(req, 'id'), body);
-      res.json({ complaint: presentComplaint(req.user!, complaint) });
-    },
-    review: async (req: Request, res: Response) => {
-      const body = parseJson(reviewSchema, req.body);
-      const complaint = await reviewCompletion(env, req.user!, param(req, 'id'), body);
       res.json({ complaint: presentComplaint(req.user!, complaint) });
     },
     reopen: async (req: Request, res: Response) => {

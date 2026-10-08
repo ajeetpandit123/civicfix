@@ -50,74 +50,7 @@ export const assignSchema = z.object({
   // seeded ids are human-readable rather than CUIDs.
   officerId: z.string().min(1).optional(),
   teamId: z.string().min(1).optional(),
-  // Individual field worker to put on the job (their crew is implied).
-  workerId: z.string().min(1).optional(),
   note: z.string().trim().max(2000).optional(),
-});
-
-export const completionSchema = z.object({
-  // What was actually done — the officer reviews exactly this text.
-  workCompleted: z.string().trim().min(10).max(2000),
-  completionNotes: z.string().trim().max(2000).optional(),
-});
-
-export const reviewSchema = z
-  .object({
-    decision: z.enum(['APPROVE', 'REJECT']),
-    reason: z.string().trim().max(2000).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.decision === 'REJECT' && (!value.reason || value.reason.trim().length < 5)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['reason'],
-        message: 'A rejection reason is required (at least 5 characters)',
-      });
-    }
-  });
-
-/**
- * Staff registration request. `role` is an ENUM of the two staff roles only —
- * ADMIN can never be requested from a public form, and the backend treats the
- * account as PENDING_VERIFICATION (no permissions) until an admin approves it.
- */
-export const staffRegisterSchema = z
-  .object({
-    role: z.enum(['OFFICER', 'FIELD_WORKER']),
-    name: z.string().trim().min(2).max(120),
-    email: z.string().trim().toLowerCase().email().max(255),
-    password: z.string().min(8).max(128),
-    phone: z.string().trim().max(24).optional(),
-    // Employee verification details.
-    employeeId: z.string().trim().min(2).max(64),
-    designation: z.string().trim().max(120).optional(),
-    organization: z.string().trim().max(160).optional(),
-    departmentId: z.string().trim().min(1).max(64),
-    // Officers serve a jurisdiction; field workers join a crew.
-    jurisdictionId: z.string().trim().max(64).optional(),
-    teamId: z.string().trim().max(64).optional(),
-    officeLocation: z.string().trim().max(240).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.role === 'OFFICER' && !value.jurisdictionId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['jurisdictionId'],
-        message: 'An officer must name the jurisdiction they are responsible for',
-      });
-    }
-    if (value.role === 'FIELD_WORKER' && !value.teamId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['teamId'],
-        message: 'A field worker must join a crew (team)',
-      });
-    }
-  });
-
-// Rejecting a staff request is permanent and must say why.
-export const staffRejectSchema = z.object({
-  reason: z.string().trim().min(5).max(2000),
 });
 
 export const commentSchema = z.object({

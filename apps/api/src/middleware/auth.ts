@@ -29,23 +29,10 @@ export function authMiddleware(env: Env) {
       if (!user || user.deletedAt || user.status === 'DISABLED') {
         throw new UnauthorizedError('Account unavailable');
       }
-      // Staff under review have an account but no permissions yet: they may
-      // read their own status (auth endpoints) and nothing operational.
-      // Matched on the full URL so it does not depend on how routers mount.
-      const staffSelfService = req.originalUrl.startsWith('/api/auth/');
-      if (
-        user.status === 'PENDING_VERIFICATION' &&
-        user.role !== 'CITIZEN' &&
-        !staffSelfService
-      ) {
-        throw new ForbiddenError(
-          'Your staff account is currently under verification. You will receive access after an administrator approves your account.',
-        );
-      }
       req.user = { id: user.id, role: user.role, email: user.email };
       next();
     } catch (err) {
-      next(err instanceof ForbiddenError || err instanceof UnauthorizedError ? err : new UnauthorizedError());
+      next(err instanceof UnauthorizedError ? err : new UnauthorizedError());
     }
   };
 }

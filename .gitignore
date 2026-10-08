@@ -8,7 +8,6 @@ coverage
 .env.local
 .env.*.local
 uploads
-.pgdata
 tmp
 .DS_Store
 Thumbs.db
@@ -23,3 +22,4 @@ apps/web/.turbo
 
 # Cana workspace artifacts (agent plans, local state)
 .cocreate/
+.pgdata/
